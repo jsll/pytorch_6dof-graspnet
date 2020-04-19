@@ -47,7 +47,7 @@ class GraspNetModel:
             self.load_network(opt.which_epoch)
 
     def set_input(self, data):
-        input_pcs = torch.from_numpy(data['pc']).float()
+        input_pcs = torch.from_numpy(data['pc']).contiguous()
         input_grasps = torch.from_numpy(data['grasp_rt']).float()
         target_grasps = torch.from_numpy(data['target_cps']).float()
         # set inputs
@@ -62,27 +62,32 @@ class GraspNetModel:
 
     def backward(self, out):
         if self.opt.arch == 'vae':
+            predicted_cp, confidence, mu, logvar = out
             predicted_cp = utils.transform_control_points(
-                out[0], out[0].shape[0])
+                predicted_cp, predicted_cp.shape[0])
             self.reconstruction_loss, self.confidence_loss = self.criterion[1](
                 predicted_cp,
                 self.target,
-                confidence=out[1],
+                confidence=confidence,
                 confidence_weight=self.opt.confidence_weight)
-            self.kl_loss = self.opt.kl_loss_weight * self.criterion[0](out[1],
-                                                                       out[2])
+            self.kl_loss = self.opt.kl_loss_weight * self.criterion[0](mu,
+                                                                       logvar)
             self.loss = self.kl_loss + self.reconstruction_loss + self.confidence_loss
         elif self.opt.arch == 'gan':
-            predicted_cp = utils.transform_control_points(out[0], out.shape[0])
+            predicted_cp, confidence = out
+            predicted_cp = utils.transform_control_points(
+                predicted_cp, predicted_cp.shape[0])
             self.reconstruction_loss, self.confidence_loss = self.criterion(
                 predicted_cp,
                 self.target,
-                confidence=out[1],
+                confidence=confidence,
                 confidence_weight=self.opt.confidence_weight)
             self.loss = self.reconstruction_loss + self.confidence_loss
         elif self.opt.arch == 'evaluator':
+            grasp_classification, confidence = out
             self.classification_loss, self.confidence_loss = self.criterion(
-                out[0], self.target, out[1], self.opt.confidence_weight)
+                grasp_classification, self.target, confidence,
+                self.opt.confidence_weight)
             self.loss = self.classification_loss + self.confidence_loss
 
         self.loss.backward()

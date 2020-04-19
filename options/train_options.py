@@ -91,3 +91,7 @@ class TrainOptions(BaseOptions):
             default=0,
             help='If 1 uses gan formulation to train instead of vae')
         self.is_train = True
+
+        self.parser.add_argument('--no_vis',
+                                 action='store_true',
+                                 help='will not use tensorboard')

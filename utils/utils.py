@@ -5,8 +5,8 @@ import math
 import time
 import trimesh.transformations as tra
 import json
-import sample
-import torch as tc
+from utils import sample
+import torch
 
 GRIPPER_PC = np.load('gripper_models/panda_pc.npy',
                      allow_pickle=True).item()['points']
@@ -232,26 +232,26 @@ def merge_pc_and_gripper_pc(pc,
     if instance_mode == 1:
         assert pc_shape[-1] == 3
         latent_dist = [pc_latent, gripper_pc_latent]
-        latent_dist = tc.cat(latent_dist, 1)
+        latent_dist = torch.cat(latent_dist, 1)
 
-    l0_xyz = tc.cat((pc, gripper_pc), 1)
+    l0_xyz = torch.cat((pc, gripper_pc), 1)
     labels = [
-        tc.ones((pc.shape[1], 1), dtype=tc.float32),
-        tc.zeros((gripper_pc.shape[1], 1), dtype=tc.float32)
+        torch.ones((pc.shape[1], 1), dtype=torch.float32),
+        torch.zeros((gripper_pc.shape[1], 1), dtype=torch.float32)
     ]
-    labels = tc.cat(labels, 0)
-    labels = tc.expand_dims(labels, 0)
-    labels = tc.tile(labels, [batch_size, 1, 1])
+    labels = torch.cat(labels, 0)
+    labels = torch.expand_dims(labels, 0)
+    labels = torch.tile(labels, [batch_size, 1, 1])
 
     if instance_mode == 1:
-        l0_points = tc.cat([l0_xyz, latent_dist, labels], -1)
+        l0_points = torch.cat([l0_xyz, latent_dist, labels], -1)
     else:
-        l0_points = tc.cat([l0_xyz, labels], -1)
+        l0_points = torch.cat([l0_xyz, labels], -1)
 
     return l0_xyz, l0_points
 
 
-def get_gripper_pc(batch_size, npoints, use_tc=True):
+def get_gripper_pc(batch_size, npoints, use_torch=True):
     """
       Returns a numpy array or a tensor of shape (batch_size x npoints x 4).
       Represents gripper with the sepcified number of points.
@@ -267,8 +267,8 @@ def get_gripper_pc(batch_size, npoints, use_tc=True):
     else:
         raise ValueError('npoints should not be -1.')
 
-    if use_tc:
-        output = tc.tensor(output, tc.float32)
+    if use_torch:
+        output = torch.tensor(output, torch.float32)
         output = output.repeat(batch, size, 1, 1)
         return output
     else:
@@ -277,12 +277,12 @@ def get_gripper_pc(batch_size, npoints, use_tc=True):
     return output
 
 
-def get_control_point_tensor(batch_size, use_tc=True):
+def get_control_point_tensor(batch_size, use_torch=True):
     """
       Outputs a tensor of shape (batch_size x 6 x 3).
       use_tf: switches between outputing a tensor and outputing a numpy array.
     """
-    control_points = np.load('../gripper_control_points/panda.npy')[:, :3]
+    control_points = np.load('./gripper_control_points/panda.npy')[:, :3]
     control_points = [[0, 0, 0], [0, 0, 0], control_points[0, :],
                       control_points[1, :], control_points[-2, :],
                       control_points[-1, :]]
@@ -290,8 +290,8 @@ def get_control_point_tensor(batch_size, use_tc=True):
     control_points = np.tile(np.expand_dims(control_points, 0),
                              [batch_size, 1, 1])
 
-    if use_tc:
-        return tc.tensor(control_points)
+    if use_torch:
+        return torch.tensor(control_points)
 
     return control_points
 
@@ -313,11 +313,49 @@ def transform_control_points(gt_grasps,
     if mode == 'qt':
         assert (len(grasp_shape) == 2), grasp_shape
         assert (grasp_shape[-1] == 7), grasp_shape
-        control_points = get_control_point_tensor(batch_size)
+        control_points = get_control_point_tensor(batch_size).cuda()
         num_control_points = control_points.shape[1]
         input_gt_grasps = gt_grasps
-        gt_grasps = tc.unsqueeze(input_gt_grasps,
-                                 1).repeat(1, num_control_points, 1)
+        gt_grasps = torch.unsqueeze(input_gt_grasps,
+                                    1).repeat(1, num_control_points, 1)
+        gt_q = gt_grasps[:, :, :4]
+        gt_t = gt_grasps[:, :, 4:]
+        gt_control_points = rotate_point_by_quaternion(control_points, gt_q)
+        gt_control_points += gt_t
+
+        return gt_control_points
+    else:
+        assert (len(grasp_shape) == 3), grasp_shape
+        assert (grasp_shape[1] == 4 and grasp_shape[2] == 4), grasp_shape
+        control_points = get_control_point_tensor(batch_size)
+        shape = control_points.shape
+        ones = torch.ones((shape[0], shape[1], 1), dtype=torch.float32)
+        control_points = torch.cat((control_points, ones), -1)
+        return torch.matmul(control_points, gt_grasps.permute(2, 0, 1))
+
+
+def transform_control_points_numpy(gt_grasps,
+                                   batch_size,
+                                   mode='qt',
+                                   scope='transform_gt_control_points'):
+    """
+      Transforms canonical points using gt_grasps.
+      mode = 'qt' expects gt_grasps to have (batch_size x 7) where each 
+        element is catenation of quaternion and translation for each
+        grasps.
+      mode = 'rt': expects to have shape (batch_size x 4 x 4) where
+        each element is 4x4 transformation matrix of each grasp.
+    """
+    assert (mode == 'qt' or mode == 'rt'), mode
+    grasp_shape = gt_grasps.shape
+    if mode == 'qt':
+        assert (len(grasp_shape) == 2), grasp_shape
+        assert (grasp_shape[-1] == 7), grasp_shape
+        control_points = get_control_point_tensor(batch_size, use_torch=False)
+        num_control_points = control_points.shape[1]
+        input_gt_grasps = gt_grasps
+        gt_grasps = np.expand_dims(input_gt_grasps,
+                                   1).repeat(num_control_points, axis=1)
         gt_q = gt_grasps[:, :, :4]
         gt_t = gt_grasps[:, :, 4:]
 
@@ -328,39 +366,40 @@ def transform_control_points(gt_grasps,
     else:
         assert (len(grasp_shape) == 3), grasp_shape
         assert (grasp_shape[1] == 4 and grasp_shape[2] == 4), grasp_shape
-        control_points = get_control_point_tensor(batch_size)
+        control_points = get_control_point_tensor(batch_size, use_torch=False)
         shape = control_points.shape
-        ones = tc.ones((shape[0], shape[1], 1), dtype=tc.float32)
-        control_points = tc.cat((control_points, ones), -1)
-        return tc.matmul(control_points, gt_grasps.permute(2, 0, 1))
+        ones = np.ones((shape[0], shape[1], 1), dtype=np.float32)
+        control_points = np.concatenate((control_points, ones), -1)
+        return np.einsum("ijk,kki->ijk", control_points, gt_grasps.T)
 
 
-def quaternion_mult(Q, R):
+def quaternion_mult(q, r):
     """
-      Computes the multiplication of quaternions Q and R.
+    Multiply quaternion(s) q with quaternion(s) r.
+    Expects two equally-sized tensors of shape (*, 4), where * denotes any number of dimensions.
+    Returns q*r as a tensor of shape (*, 4).
     """
-    Q_shape = Q.shape
-    R_shape = R.shape
-    assert (Q_shape[-1] == 4)
-    assert (R_shape[-1] == 4)
-    q = Q.unfold(dimension=-1, size=4, step=4)
-    r = R.unfold(dimension=-1, size=4, step=4)
-    outputs_list = [
-        r[0] * q[0] - r[1] * q[1] - r[2] * q[2] - r[3] * q[3],
-        r[0] * q[1] + r[1] * q[0] - r[2] * q[3] + r[3] * q[2],
-        r[0] * q[2] + r[1] * q[3] + r[2] * q[0] - r[3] * q[1],
-        r[0] * q[3] - r[1] * q[2] + r[2] * q[1] + r[3] * q[0]
-    ]
-    outputs = tc.cat(outputs_list, dim=0)
-    return outputs
+    assert q.shape[-1] == 4
+    assert r.shape[-1] == 4
+
+    original_shape = q.shape
+
+    # Compute outer product
+    terms = torch.bmm(r.view(-1, 4, 1), q.view(-1, 1, 4))
+
+    w = terms[:, 0, 0] - terms[:, 1, 1] - terms[:, 2, 2] - terms[:, 3, 3]
+    x = terms[:, 0, 1] + terms[:, 1, 0] - terms[:, 2, 3] + terms[:, 3, 2]
+    y = terms[:, 0, 2] + terms[:, 1, 3] + terms[:, 2, 0] - terms[:, 3, 1]
+    z = terms[:, 0, 3] - terms[:, 1, 2] + terms[:, 2, 1] + terms[:, 3, 0]
+    return torch.stack((w, x, y, z), dim=1).view(original_shape)
 
 
 def conj_quaternion(q):
     """
       Conjugate of quaternion q.
     """
-    q_conj = q.unfold(dimension=-1, size=4, step=4)
-    q_conj = tc.cat([q_conj[0], -q_conj[1], -q_conj[2], -q_conj[3]], dim=-1)
+    q_conj = q.clone()
+    q_conj[:, :, 1:] *= -1
     return q_conj
 
 
@@ -386,48 +425,55 @@ def rotate_point_by_quaternion(point, q):
         shape, q_shape)
 
     q_conj = conj_quaternion(q)
-    r = tc.cat([tc.zeros((shape[0], shape[1], 1), dtype=point.dtype), point],
-               dim=-1)
+    r = torch.cat([
+        torch.zeros((shape[0], shape[1], 1), dtype=point.dtype).cuda(), point
+    ],
+                  dim=-1)
     final_point = quaternion_mult(quaternion_mult(q, r), q_conj)
     final_output = final_point[:, :,
-                               1:]  #tc.slice(final_point, [0, 0, 1], shape)
+                               1:]  #torch.slice(final_point, [0, 0, 1], shape)
     return final_output
 
 
 def tc_rotation_matrix(az, el, th, batched=False):
     if batched:
-        cx = tc.cos(tc.reshape(az, [-1, 1]))
-        cy = tc.cos(tc.reshape(el, [-1, 1]))
-        cz = tc.cos(tc.reshape(th, [-1, 1]))
-        sx = tc.sin(tc.reshape(az, [-1, 1]))
-        sy = tc.sin(tc.reshape(el, [-1, 1]))
-        sz = tc.sin(tc.reshape(th, [-1, 1]))
+        cx = torch.cos(torch.reshape(az, [-1, 1]))
+        cy = torch.cos(torch.reshape(el, [-1, 1]))
+        cz = torch.cos(torch.reshape(th, [-1, 1]))
+        sx = torch.sin(torch.reshape(az, [-1, 1]))
+        sy = torch.sin(torch.reshape(el, [-1, 1]))
+        sz = torch.sin(torch.reshape(th, [-1, 1]))
 
-        ones = tc.ones_like(cx)
-        zeros = tc.zeros_like(cx)
+        ones = torch.ones_like(cx)
+        zeros = torch.zeros_like(cx)
 
-        rx = tc.cat([ones, zeros, zeros, zeros, cx, -sx, zeros, sx, cx],
-                    dim=-1)
-        ry = tc.cat([cy, zeros, sy, zeros, ones, zeros, -sy, zeros, cy],
-                    dim=-1)
-        rz = tc.cat([cz, -sz, zeros, sz, cz, zeros, zeros, zeros, ones],
-                    dim=-1)
+        rx = torch.cat([ones, zeros, zeros, zeros, cx, -sx, zeros, sx, cx],
+                       dim=-1)
+        ry = torch.cat([cy, zeros, sy, zeros, ones, zeros, -sy, zeros, cy],
+                       dim=-1)
+        rz = torch.cat([cz, -sz, zeros, sz, cz, zeros, zeros, zeros, ones],
+                       dim=-1)
 
-        rx = tc.reshape(rx, [-1, 3, 3])
-        ry = tc.reshape(ry, [-1, 3, 3])
-        rz = tc.reshape(rz, [-1, 3, 3])
+        rx = torch.reshape(rx, [-1, 3, 3])
+        ry = torch.reshape(ry, [-1, 3, 3])
+        rz = torch.reshape(rz, [-1, 3, 3])
 
-        return tc.matmul(rz, tc.matmul(ry, rx))
+        return torch.matmul(rz, torch.matmul(ry, rx))
     else:
-        cx = tc.cos(az)
-        cy = tc.cos(el)
-        cz = tc.cos(th)
-        sx = tc.sin(az)
-        sy = tc.sin(el)
-        sz = tc.sin(th)
+        cx = torch.cos(az)
+        cy = torch.cos(el)
+        cz = torch.cos(th)
+        sx = torch.sin(az)
+        sy = torch.sin(el)
+        sz = torch.sin(th)
 
-        rx = tc.stack([[1., 0., 0.], [0, cx, -sx], [0, sx, cx]], dim=0)
-        ry = tc.stack([[cy, 0, sy], [0, 1, 0], [-sy, 0, cy]], dim=0)
-        rz = tc.stack([[cz, -sz, 0], [sz, cz, 0], [0, 0, 1]], dim=0)
+        rx = torch.stack([[1., 0., 0.], [0, cx, -sx], [0, sx, cx]], dim=0)
+        ry = torch.stack([[cy, 0, sy], [0, 1, 0], [-sy, 0, cy]], dim=0)
+        rz = torch.stack([[cz, -sz, 0], [sz, cz, 0], [0, 0, 1]], dim=0)
 
-        return tc.matmul(rz, tc.matmul(ry, rx))
+        return torch.matmul(rz, torch.matmul(ry, rx))
+
+
+def mkdir(path):
+    if not os.path.isdir(path):
+        os.makedirs(path)

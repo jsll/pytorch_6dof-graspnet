@@ -4,8 +4,8 @@ import pickle
 import os
 import copy
 import json
-from util.sample import Object
-from util import utils
+from utils.sample import Object
+from utils import utils
 import glob
 from renderer.online_object_renderer import OnlineObjectRendererMultiProcess, OnlineObjectRenderer
 
@@ -18,6 +18,8 @@ class NoPositiveGraspsException(Exception):
 class BaseDataset(data.Dataset):
     def __init__(self,
                  opt,
+                 caching=True,
+                 run_in_another_process=True,
                  min_difference_allowed=(0, 0, 0),
                  max_difference_allowed=(3, 3, 0),
                  collision_hard_neg_min_translation=(-0.03, -0.03, -0.03),
@@ -31,6 +33,7 @@ class BaseDataset(data.Dataset):
         self.std = 1
         self.ninput_channels = None
         self.current_pc = None
+        self.caching = caching
         self.cache = {}
         self.collision_hard_neg_min_translation = collision_hard_neg_min_translation
         self.collision_hard_neg_max_translation = collision_hard_neg_max_translation
@@ -44,7 +47,7 @@ class BaseDataset(data.Dataset):
             assert (collision_hard_neg_min_translation[i] <=
                     collision_hard_neg_max_translation[i])
 
-        if self.opt.run_in_another_process:
+        if run_in_another_process:
             self.renderer = OnlineObjectRendererMultiProcess(caching=True)
         else:
             self.renderer = OnlineObjectRenderer(caching=True)
@@ -58,7 +61,7 @@ class BaseDataset(data.Dataset):
 
         self.eval_files = [
             json.load(open(f)) for f in glob.glob(
-                os.path.join(self.opt.root_folder, 'splits', '*.json'))
+                os.path.join(self.opt.dataset_root_folder, 'splits', '*.json'))
         ]
 
     def apply_dropout(self, pc):
@@ -102,17 +105,17 @@ class BaseDataset(data.Dataset):
 
     def read_grasp_file(self, path, return_all_grasps=False):
         file_name = path
-        if self.opt.caching and file_name in self.cache:
+        if self.caching and file_name in self.cache:
             pos_grasps, pos_qualities, neg_grasps, neg_qualities, cad, cad_path, cad_scale = copy.deepcopy(
                 self.cache[file_name])
             return pos_grasps, pos_qualities, neg_grasps, neg_qualities, cad, cad_path, cad_scale
 
         pos_grasps, pos_qualities, neg_grasps, neg_qualities, cad, cad_path, cad_scale = self.read_object_grasp_data(
             path,
-            ratio_of_grasps_to_be_used=self.opt.ratio_of_grasps_used,
+            ratio_of_grasps_to_be_used=self.opt.grasps_ratio,
             return_all_grasps=return_all_grasps)
 
-        if self.opt.caching:
+        if self.caching:
             self.cache[file_name] = (pos_grasps, pos_qualities, neg_grasps,
                                      neg_qualities, cad, cad_path, cad_scale)
             return copy.deepcopy(self.cache[file_name])
@@ -129,7 +132,7 @@ class BaseDataset(data.Dataset):
         grasps.
         """
         num_clusters = self.opt.num_grasp_clusters
-        root_folder = self.opt.root_folder
+        root_folder = self.opt.dataset_root_folder
 
         if num_clusters <= 0:
             raise NoPositiveGraspsException
@@ -238,7 +241,8 @@ class BaseDataset(data.Dataset):
         (here N=5)
         """
 
-        mean_std_cache = os.path.join(self.opt.root, 'mean_std_cache.p')
+        mean_std_cache = os.path.join(self.opt.dataset_root_folder,
+                                      'mean_std_cache.p')
         if not os.path.isfile(mean_std_cache):
             print('computing mean std from train data...')
             # doesn't run augmentation during m/std computation

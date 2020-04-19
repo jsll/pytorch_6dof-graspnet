@@ -4,7 +4,7 @@ from torch.nn import init
 import functools
 from torch.optim import lr_scheduler
 import torch.nn.functional as F
-import losses
+from models import losses
 from torch.nn import Sequential as Seq, Linear as Lin, ReLU, BatchNorm1d as BN
 import pointnet2_ops.pointnet2_modules as pointnet2
 
@@ -104,25 +104,33 @@ class GraspSampler(nn.Module):
     def __init__(self):
         super(GraspSampler, self).__init__()
 
-    def decode(self, pc, z):
-        pc_features = self.concatenate_z_with_pc(pc, z).transpose(-1, 1)
-        z = self.decoder(pc, pc_features)
-        predicted_qt = torch.cat(
-            (self.q(z), F.normalize(self.t(z), p=2, dim=-1)), -1)
+    def create_decoder(self, model_scale, pointnet_radius, pointnet_nclusters,
+                       num_input_features):
+        # The number of input features for the decoder is 3+latent space where 3
+        # represents the x, y, z position of the point-cloud
 
-        return predicted_qt, F.sigmoid(self.confidence(z))
-
-    def concatenate_z_with_pc(self, pc, z):
-        z.unsqueeze_(1)
-        z = z.expand(z.shape[0], pc.shape[1], z.shape[-1])
-        return torch.cat((pc, z), -1)
-
-    def create_decoder(self, model_scale, pointnet_radius, pointnet_nclusters):
-        self.decoder = base_network(pointnet_radius, model_scale,
-                                    pointnet_nclusters)
+        self.decoder = base_network(pointnet_radius, pointnet_nclusters,
+                                    model_scale, num_input_features)
         self.q = nn.Linear(model_scale * 1024, 4)
         self.t = nn.Linear(model_scale * 1024, 3)
         self.confidence = nn.Linear(model_scale * 1024, 1)
+
+    def decode(self, xyz, z):
+        xyz_features = self.concatenate_z_with_pc(xyz,
+                                                  z).transpose(-1,
+                                                               1).contiguous()
+        for module in self.decoder[0]:
+            xyz, xyz_features = module(xyz, xyz_features)
+        x = self.decoder[1](xyz_features.squeeze(-1))
+        predicted_qt = torch.cat(
+            (F.normalize(self.q(x), p=2, dim=-1), self.t(x)), -1)
+
+        return predicted_qt, torch.sigmoid(self.confidence(x)).squeeze()
+
+    def concatenate_z_with_pc(self, pc, z):
+        z.unsqueeze_(1)
+        z = z.expand(-1, pc.shape[1], -1)
+        return torch.cat((pc, z), -1)
 
 
 class GraspSamplerVAE(GraspSampler):
@@ -135,7 +143,9 @@ class GraspSamplerVAE(GraspSampler):
                  latent_size=2):
         super(GraspSamplerVAE, self).__init__()
         self.create_encoder(model_scale, pointnet_radius, pointnet_nclusters)
-        self.create_decoder(model_scale, pointnet_radius, pointnet_nclusters)
+
+        self.create_decoder(model_scale, pointnet_radius, pointnet_nclusters,
+                            latent_size + 3)
         self.create_bottleneck(model_scale * 1024, latent_size)
         self.latent_size = latent_size
 
@@ -145,16 +155,20 @@ class GraspSamplerVAE(GraspSampler):
             pointnet_radius,
             pointnet_nclusters,
     ):
-        self.encoder = base_network(pointnet_radius, model_scale,
-                                    pointnet_nclusters)
+        # The number of input features for the encoder is 19: the x, y, z
+        # position of the point-cloud and the flattened 4x4=16 grasp pose matrix
+        self.encoder = base_network(pointnet_radius, pointnet_nclusters,
+                                    model_scale, 19)
 
     def create_bottleneck(self, input_size, latent_size):
         mu = nn.Linear(input_size, latent_size)
         logvar = nn.Linear(input_size, latent_size)
-        self.latent_space = (mu, logvar)
+        self.latent_space = nn.ModuleList([mu, logvar])
 
-    def encode(self, pc, pc_features):
-        return self.encoder(pc, pc_features)
+    def encode(self, xyz, xyz_features):
+        for module in self.encoder[0]:
+            xyz, xyz_features = module(xyz, xyz_features)
+        return self.encoder[1](xyz_features.squeeze(-1))
 
     def bottleneck(self, z):
         return self.latent_space[0](z), self.latent_space[1](z)
@@ -166,16 +180,19 @@ class GraspSamplerVAE(GraspSampler):
 
     def forward(self, pc, grasp=None, train=True):
         if train:
-            self.forward_train(pc, grasp)
+            return self.forward_train(pc, grasp)
         else:
-            self.forward_test(pc)
+            return self.forward_test(pc)
 
     def forward_train(self, pc, grasp):
-        input_features = torch.cat((pc, grasp), 0).transpose(-1, 1)
+        input_features = torch.cat(
+            (pc, grasp.unsqueeze(1).expand(-1, pc.shape[1], -1)),
+            -1).transpose(-1, 1).contiguous()
         z = self.encode(pc, input_features)
         mu, logvar = self.bottleneck(z)
         z = self.reparameterize(mu, logvar)
-        return self.decode(pc, z), mu, logvar
+        qt, confidence = self.decode(pc, z)
+        return qt, confidence, mu, logvar
 
     def forward_test(self, pc):
         z = torch.randn((pc.shape[0], self.latent_size))
@@ -189,7 +206,8 @@ class GraspSamplerGAN(GraspSampler):
                  pointnet_nclusters,
                  latent_size=2):
         super(GraspSamplerGAN, self).__init__()
-        self.create_decoder(model_scale, pointnet_radius, pointnet_nclusters)
+        self.create_decoder(model_scale, pointnet_radius, pointnet_nclusters,
+                            latent_size + 3)
         self.latent_size = latent_size
 
     def sample_latent(self, batch_size):
@@ -210,8 +228,13 @@ class GraspEvaluator(nn.Module):
 
     def create_evaluator(self, pointnet_radius, model_scale,
                          pointnet_nclusters):
+        # The number of input features for the evaluator is 4: the x, y, z
+        # position of the concatenated gripper and object point-clouds and an
+        # extra binary feature, which is 0 for the object and 1 for the gripper,
+        # to tell these point-clouds apart
+
         self.evaluator = base_network(pointnet_radius, model_scale,
-                                      pointnet_nclusters)
+                                      pointnet_nclusters, 4)
         self.predictions_logits = nn.Linear(1024 * model_scale, 2)
         self.confidence = nn.Linear(1024 * model_scale, 1)
 
@@ -253,21 +276,24 @@ class GraspEvaluator(nn.Module):
         return l0_xyz, l0_points
 
 
-def base_network(pointnet_radius, pointnet_nclusters, scale):
+def base_network(pointnet_radius, pointnet_nclusters, scale, in_features):
     sa1_module = pointnet2.PointnetSAModule(
-        npoints=pointnet_nclusters,
+        npoint=pointnet_nclusters,
         radius=pointnet_radius,
-        nsamples=64,
-        mlp=[64 * scale, 64 * scale, 128 * scale])
+        nsample=64,
+        mlp=[in_features, 64 * scale, 64 * scale, 128 * scale])
     sa2_module = pointnet2.PointnetSAModule(
-        npoints=32,
+        npoint=32,
         radius=0.04,
-        nsamples=128,
-        mlp=[128 * scale, 128 * scale, 256 * scale])
+        nsample=128,
+        mlp=[128 * scale, 128 * scale, 128 * scale, 256 * scale])
+
     sa3_module = pointnet2.PointnetSAModule(
-        mlp=[256 * scale, 256 * scale, 512 * scale])
-    fc_layer = nn.Sequential(nn.Linear(1024, 1024 * scale),
+        mlp=[256 * scale, 256 * scale, 256 * scale, 512 * scale])
+
+    sa_modules = nn.ModuleList([sa1_module, sa2_module, sa3_module])
+    fc_layer = nn.Sequential(nn.Linear(512 * scale, 1024 * scale),
                              nn.BatchNorm1d(1024 * scale), nn.ReLU(True),
                              nn.Linear(1024 * scale, 1024 * scale),
                              nn.BatchNorm1d(1024 * scale), nn.ReLU(True))
-    return nn.ModuleList([sa1_module, sa2_module, sa3_module, fc_layer])
+    return nn.ModuleList([sa_modules, fc_layer])

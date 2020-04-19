@@ -18,12 +18,12 @@ class Writer:
         self.start_logs()
         self.nexamples = 0
         self.ncorrect = 0
-        if opt.grasping:
-            self.acc_types = ["quality", "depth", "sin", "cos"]
-            self.grasp_depth_acc = 0
-            self.grasp_sin_acc = 0
-            self.grasp_cos_acc = 0
-        #
+        #if opt.grasping:
+        #    self.acc_types = ["quality", "depth", "sin", "cos"]
+        #    self.grasp_depth_acc = 0
+        #    self.grasp_sin_acc = 0
+        #    self.grasp_cos_acc = 0
+        ##
         if opt.is_train and not opt.no_vis and SummaryWriter is not None:
             self.display = SummaryWriter(comment=opt.name)
         else:

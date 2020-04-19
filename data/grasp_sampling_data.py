@@ -11,11 +11,11 @@ class GraspSamplingData(BaseDataset):
         self.opt = opt
         self.device = torch.device('cuda:{}'.format(
             opt.gpu_ids[0])) if opt.gpu_ids else torch.device('cpu')
-        self.root = opt.dataroot
-        self.dir = os.path.join(opt.dataroot, opt.phase)
+        self.root = opt.dataset_root_folder
+        self.dir = os.path.join(opt.dataset_root_folder, "grasps")
         self.paths = self.make_dataset(self.dir)
         self.size = len(self.paths)
-        self.get_mean_std()
+        #self.get_mean_std()
         opt.input_nc = self.ninput_channels
 
     def __getitem__(self, index):
@@ -37,7 +37,7 @@ class GraspSamplingData(BaseDataset):
         output_qualities = []
         output_grasps = []
 
-        for iter in range(self.opt.batch_size):
+        for iter in range(self.opt.num_grasps_per_object):
             selected_grasp_index = all_clusters[iter]
 
             selected_grasp = pos_grasps[selected_grasp_index[0]][
@@ -47,11 +47,12 @@ class GraspSamplingData(BaseDataset):
             output_qualities.append(selected_quality)
             output_grasps.append(camera_pose.dot(selected_grasp))
 
-        gt_control_points = utils.transform_control_points(
-            output_grasps, self.opt.num_grasps_per_object, mode='rt')
+        gt_control_points = utils.transform_control_points_numpy(
+            np.array(output_grasps), self.opt.num_grasps_per_object, mode='rt')
 
-        meta['pc'] = np.array([pc] * self.opt.num_grasps_per_object)
-        meta['grasp_rt'] = np.array(output_grasps)
+        meta['pc'] = np.array([pc] * self.opt.num_grasps_per_object)[:, :, :3]
+        meta['grasp_rt'] = np.array(output_grasps).reshape(
+            len(output_grasps), -1)
         meta['pc_pose'] = np.array([utils.inverse_transform(camera_pose)] *
                                    self.opt.num_grasps_per_object)
         meta['cad_path'] = np.array([cad_path] *
@@ -59,7 +60,7 @@ class GraspSamplingData(BaseDataset):
         meta['cad_scale'] = np.array([cad_scale] *
                                      self.opt.num_grasps_per_object)
         meta['quality'] = np.array(output_qualities)
-        meta['target_cps'] = np.array(gt_control_points)
+        meta['target_cps'] = np.array(gt_control_points[:, :, :3])
         return meta
 
     def __len__(self):
