@@ -274,6 +274,37 @@ class BaseDataset(data.Dataset):
             self.std = transform_dict['std']
             self.ninput_channels = transform_dict['ninput_channels']
 
+    def make_dataset(self, ):
+        split_files = os.listdir(
+            os.path.join(self.opt.dataset_root_folder,
+                         self.opt.splits_folder_name))
+        files = []
+        for split_file in split_files:
+            if split_file.find('.json') < 0:
+                continue
+
+            should_go_through = False
+            if self.opt.allowed_categories == '':
+                should_go_through = True
+                if self.opt.blacklisted_categories != '':
+                    if blacklisted_categories.find(split_file[:-5]) >= 0:
+                        should_go_through = False
+            else:
+                if self.opt.allowed_categories.find(split_file[:-5]) >= 0:
+                    should_go_through = True
+
+            if should_go_through:
+                files += [
+                    os.path.join(self.opt.dataset_root_folder,
+                                 self.opt.grasps_folder_name, f)
+                    for f in json.load(
+                        open(
+                            os.path.join(self.opt.dataset_root_folder, self.
+                                         opt.splits_folder_name, split_file)))[
+                                             self.opt.training_splits]
+                ]
+        return files
+
     def __del__(self):
         print('********** terminating renderer **************')
         self.renderer.terminate()

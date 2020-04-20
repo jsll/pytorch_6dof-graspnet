@@ -10,17 +10,19 @@ except:
     from queue import Queue
 
 
-class GraspSamplingData(BaseDataset):
-    def __init__(self, opt):
+class GraspEvaluatorData(BaseDataset):
+    def __init__(self, opt, ratio_positive=0.3, ratio_hardnegative=0.4):
         BaseDataset.__init__(self, opt)
         self.opt = opt
         self.device = torch.device('cuda:{}'.format(
             opt.gpu_ids[0])) if opt.gpu_ids else torch.device('cpu')
         self.root = opt.dataset_root_folder
-        self.dir = os.path.join(opt.dataset_root_folder, opt.phase)
-        self.paths = self.make_dataset(self.dir)
+        self.paths = self.make_dataset()
         self.size = len(self.paths)
-        self.get_mean_std()
+        self.ratio_positive = ratio_positive
+        self.collision_hard_neg_queue = {}
+        self.ratio_hardnegative = ratio_hardnegative
+        #self.get_mean_std()
         opt.input_nc = self.ninput_channels
 
     def __getitem__(self, index):
@@ -30,9 +32,12 @@ class GraspSamplingData(BaseDataset):
         else:
             data = self.get_nonuniform_evaluator_data(path)
 
+        gt_control_points = utils.transform_control_points_numpy(
+            data[1], self.opt.num_grasps_per_object, mode='rt')
+
         meta = {}
-        meta['pc'] = data[0]
-        meta['grasp_rt'] = data[1]
+        meta['pc'] = data[0][:, :, :3]
+        meta['grasp_rt'] = gt_control_points[:, :, :3]
         meta['labels'] = data[2]
         meta['quality'] = data[3]
         meta['pc_pose'] = data[4]
@@ -95,10 +100,10 @@ class GraspSamplingData(BaseDataset):
                         .format(computed_quality, expected_quality))
 
         # If queue does not have enough data, fill it up with hard negative examples from the positives.
-        if path not in self._collision_hard_neg_queue or len(
-                self._collision_hard_neg_queue[path]) < num_hard_negative:
-            if path not in self._collision_hard_neg_queue:
-                self._collision_hard_neg_queue[path] = []
+        if path not in self.collision_hard_neg_queue or len(
+                self.collision_hard_neg_queue[path]) < num_hard_negative:
+            if path not in self.collision_hard_neg_queue:
+                self.collision_hard_neg_queue[path] = []
             #hard negatives are perturbations of correct grasps.
             collisions, heuristic_qualities = utils.evaluate_grasps(
                 hard_neg_candidates, obj_mesh)
@@ -107,9 +112,9 @@ class GraspSamplingData(BaseDataset):
             hard_neg_indexes = np.where(hard_neg_mask)[0].tolist()
             np.random.shuffle(hard_neg_indexes)
             for index in hard_neg_indexes:
-                self._collision_hard_neg_queue[path].append(
+                self.collision_hard_neg_queue[path].append(
                     (hard_neg_candidates[index], -1.0))
-            random.shuffle(self._collision_hard_neg_queue[path])
+            random.shuffle(self.collision_hard_neg_queue[path])
 
         # Adding positive grasps
         for positive_cluster in positive_clusters:
@@ -124,12 +129,12 @@ class GraspSamplingData(BaseDataset):
 
         # Adding hard neg
         for i in range(num_hard_negative):
-            grasp, quality = self._collision_hard_neg_queue[path][i]
+            grasp, quality = self.collision_hard_neg_queue[path][i]
             output_grasps.append(grasp)
             output_qualities.append(quality)
             output_labels.append(0)
 
-        self._collision_hard_neg_queue[path] = self._collision_hard_neg_queue[
+        self._collision_hard_neg_queue[path] = self.collision_hard_neg_queue[
             path][num_hard_negative:]
 
         # Adding flex neg
@@ -148,7 +153,7 @@ class GraspSamplingData(BaseDataset):
             output_labels.append(0)
 
         self.change_object(cad_path, cad_scale)
-        for iter in range(self._batch_size):
+        for iter in range(self.opt.num_grasps_per_object):
             if iter > 0:
                 output_pcs.append(np.copy(output_pcs[0]))
                 output_pc_poses.append(np.copy(output_pc_poses[0]))
@@ -167,19 +172,7 @@ class GraspSamplingData(BaseDataset):
 
         return output_pcs, output_grasps, output_labels, output_qualities, output_pc_poses, output_cad_paths, output_cad_scales
 
-    @staticmethod
-    def make_dataset(path):
-        grasps = []
-        assert os.path.isdir(path), '%s is not a valid directory' % path
-
-        for root, _, fnames in sorted(os.walk(path)):
-            for fname in fnames:
-                path = os.path.join(root, fname)
-                grasps.append(path)
-
-        return grasps
-
-    def get_nonuniform_evaluator_data(self, path):
+    def get_nonuniform_evaluator_data(self, path, verify_grasps=False):
 
         pos_grasps, pos_qualities, neg_grasps, neg_qualities, obj_mesh, cad_path, cad_scale = self.read_grasp_file(
             path)
@@ -189,16 +182,17 @@ class GraspSamplingData(BaseDataset):
         output_qualities = []
         output_labels = []
         output_pc_poses = []
-        output_cad_paths = [cad_path] * self._batch_size
-        output_cad_scales = np.asarray([cad_scale] * self._batch_size,
-                                       np.float32)
+        output_cad_paths = [cad_path] * self.opt.num_grasps_per_object
+        output_cad_scales = np.asarray(
+            [cad_scale] * self.opt.num_grasps_per_object, np.float32)
 
-        num_positive = int(self._batch_size * self._ratio_positive)
+        num_positive = int(self.opt.num_grasps_per_object *
+                           self.ratio_positive)
         positive_clusters = self.sample_grasp_indexes(num_positive, pos_grasps,
                                                       pos_qualities)
-        num_negative = self._batch_size - num_positive
-        negative_clusters = self.sample_grasp_indexes(
-            self._batch_size - num_positive, neg_grasps, neg_qualities)
+        num_negative = self.opt.num_grasps_per_object - num_positive
+        negative_clusters = self.sample_grasp_indexes(num_negative, neg_grasps,
+                                                      neg_qualities)
 
         hard_neg_candidates = []
         # Fill in Positive Examples.
@@ -213,14 +207,14 @@ class GraspSamplingData(BaseDataset):
             output_labels.append(1)
             hard_neg_candidates += utils.perturb_grasp(
                 selected_grasp,
-                self._collision_hard_neg_num_perturbations,
-                self._collision_hard_neg_min_translation,
-                self._collision_hard_neg_max_translation,
-                self._collision_hard_neg_min_rotation,
-                self._collision_hard_neg_max_rotation,
+                self.collision_hard_neg_num_perturbations,
+                self.collision_hard_neg_min_translation,
+                self.collision_hard_neg_max_translation,
+                self.collision_hard_neg_min_rotation,
+                self.collision_hard_neg_max_rotation,
             )
 
-        if self.ops.verify_grasps:
+        if verify_grasps:
             collisions, heuristic_qualities = utils.evaluate_grasps(
                 output_grasps, obj_mesh)
             for computed_quality, expected_quality, g in zip(
@@ -232,14 +226,14 @@ class GraspSamplingData(BaseDataset):
                         .format(computed_quality, expected_quality))
 
         # If queue does not have enough data, fill it up with hard negative examples from the positives.
-        if path not in self._collision_hard_neg_queue or self._collision_hard_neg_queue[
+        if path not in self.collision_hard_neg_queue or self.collision_hard_neg_queue[
                 path].qsize() < num_negative:
-            if path not in self._collision_hard_neg_queue:
-                self._collision_hard_neg_queue[path] = Queue()
+            if path not in self.collision_hard_neg_queue:
+                self.collision_hard_neg_queue[path] = Queue()
             #hard negatives are perturbations of correct grasps.
             random_selector = np.random.rand()
-            if random_selector < self._ratio_hardnegative:
-                print('add hard neg')
+            if random_selector < self.ratio_hardnegative:
+                #print('add hard neg')
                 collisions, heuristic_qualities = utils.evaluate_grasps(
                     hard_neg_candidates, obj_mesh)
 
@@ -247,28 +241,28 @@ class GraspSamplingData(BaseDataset):
                 hard_neg_indexes = np.where(hard_neg_mask)[0].tolist()
                 np.random.shuffle(hard_neg_indexes)
                 for index in hard_neg_indexes:
-                    self._collision_hard_neg_queue[path].put(
+                    self.collision_hard_neg_queue[path].put(
                         (hard_neg_candidates[index], -1.0))
-            if random_selector >= self._ratio_hardnegative or self._collision_hard_neg_queue[
+            if random_selector >= self.ratio_hardnegative or self.collision_hard_neg_queue[
                     path].qsize() < num_negative:
                 for negative_cluster in negative_clusters:
                     selected_grasp = neg_grasps[negative_cluster[0]][
                         negative_cluster[1]]
                     selected_quality = neg_qualities[negative_cluster[0]][
                         negative_cluster[1]]
-                    self._collision_hard_neg_queue[path].put(
+                    self.collision_hard_neg_queue[path].put(
                         (selected_grasp, selected_quality))
 
         # Use negative examples from queue.
         for _ in range(num_negative):
             #print('qsize = ', self._collision_hard_neg_queue[file_path].qsize())
-            grasp, quality = self._collision_hard_neg_queue[path].get()
+            grasp, quality = self.collision_hard_neg_queue[path].get()
             output_grasps.append(grasp)
             output_qualities.append(quality)
             output_labels.append(0)
 
         self.change_object(cad_path, cad_scale)
-        for iter in range(self._batch_size):
+        for iter in range(self.opt.num_grasps_per_object):
             if iter > 0:
                 output_pcs.append(np.copy(output_pcs[0]))
                 output_pc_poses.append(np.copy(output_pc_poses[0]))

@@ -49,12 +49,15 @@ class GraspNetModel:
     def set_input(self, data):
         input_pcs = torch.from_numpy(data['pc']).contiguous()
         input_grasps = torch.from_numpy(data['grasp_rt']).float()
-        target_grasps = torch.from_numpy(data['target_cps']).float()
+        if self.opt.arch == "evaluator":
+            targets = torch.from_numpy(data['labels']).long()
+        else:
+            targets = torch.from_numpy(data['target_cps']).float()
         # set inputs
         self.pcs = input_pcs.to(self.device).requires_grad_(self.is_train)
         self.grasps = input_grasps.to(self.device).requires_grad_(
             self.is_train)
-        self.target = target_grasps.to(self.device)
+        self.target = targets.to(self.device)
 
     def forward(self):
         out = self.net(self.pcs, self.grasps)

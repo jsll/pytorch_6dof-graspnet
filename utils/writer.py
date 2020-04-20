@@ -18,14 +18,11 @@ class Writer:
         self.start_logs()
         self.nexamples = 0
         self.ncorrect = 0
-        #if opt.grasping:
-        #    self.acc_types = ["quality", "depth", "sin", "cos"]
-        #    self.grasp_depth_acc = 0
-        #    self.grasp_sin_acc = 0
-        #    self.grasp_cos_acc = 0
-        ##
+
         if opt.is_train and not opt.no_vis and SummaryWriter is not None:
-            self.display = SummaryWriter(comment=opt.name)
+            self.display = SummaryWriter(
+                log_dir=os.path.join(self.opt.checkpoints_dir, self.opt.name) +
+                "/tensorboard")  #comment=opt.name)
         else:
             self.display = None
 
@@ -110,30 +107,15 @@ class Writer:
         """
         self.ncorrect = 0
         self.nexamples = 0
-        if self.opt.grasping:
-            self.grasp_depth_acc = 0
-            self.grasp_sin_acc = 0
-            self.grasp_cos_acc = 0
 
     def update_counter(self, ncorrect, nexamples):
         self.nexamples += nexamples
-        if self.opt.grasping:
-            self.ncorrect += ncorrect[0]
-            self.grasp_depth_acc += ncorrect[1]
-            self.grasp_sin_acc += ncorrect[2]
-            self.grasp_cos_acc += ncorrect[3]
 
     @property
     def acc(self):
         if self.opt.grasping:
             acc_classification = float(self.ncorrect) / self.nexamples
-            acc_grasp_depth = self.grasp_depth_acc / self.nexamples
-            acc_grasp_sin = self.grasp_sin_acc / self.nexamples
-            acc_grasp_cos = self.grasp_cos_acc / self.nexamples
-            return [
-                acc_classification, acc_grasp_depth, acc_grasp_sin,
-                acc_grasp_cos
-            ]
+            return [acc_classification]
         else:
             return float(self.ncorrect) / self.nexamples
 

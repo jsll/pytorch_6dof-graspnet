@@ -7,7 +7,7 @@ class TrainOptions(BaseOptions):
         self.parser.add_argument(
             '--print_freq',
             type=int,
-            default=10,
+            default=100,
             help='frequency of showing training results on console')
         self.parser.add_argument('--save_latest_freq',
                                  type=int,
@@ -80,18 +80,15 @@ class TrainOptions(BaseOptions):
             'initially I wanted to compute confidence for vae and evaluator outputs, '
             'setting the confidence weight to 1. immediately pushes the confidence to 1.0.'
         )
-        self.parser.add_argument(
-            '--train_evaluator',
-            type=int,
-            default=0,
-            help='if set to 1, trains evaluator. 0: trains vae')
-        self.parser.add_argument(
-            '--gan',
-            type=int,
-            default=0,
-            help='If 1 uses gan formulation to train instead of vae')
-        self.is_train = True
-
         self.parser.add_argument('--no_vis',
                                  action='store_true',
                                  help='will not use tensorboard')
+        self.parser.add_argument('--verbose_plot',
+                                 action='store_true',
+                                 help='plots network weights, etc.')
+        self.parser.add_argument(
+            '--balanced_data',
+            action='store_true',
+            default=False,
+        )
+        self.is_train = True

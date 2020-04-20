@@ -8,8 +8,11 @@ from utils.writer import Writer
 
 def main():
     opt = TrainOptions().parse()
+    if opt == None:
+        return
+
     dataset = DataLoader(opt)
-    dataset_size = len(dataset)
+    dataset_size = len(dataset) * opt.num_grasps_per_object
     model = create_model(opt)
     writer = Writer(opt)
     total_steps = 0
@@ -26,7 +29,6 @@ def main():
             epoch_iter += opt.batch_size
             model.set_input(data)
             model.optimize_parameters()
-
             if total_steps % opt.print_freq == 0:
                 loss_types = []
                 if opt.arch == "vae":

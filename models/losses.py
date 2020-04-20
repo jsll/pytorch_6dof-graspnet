@@ -1,4 +1,5 @@
 import torch
+import numpy as np
 
 
 def control_point_l1_loss_better_than_threshold(pred_control_points,
@@ -51,7 +52,7 @@ def control_point_l1_loss(pred_control_points,
             torch.log(torch.max(
                 confidence,
                 torch.tensor(1e-10).cuda()))) * confidence_weight
-        print('confidence_term = ', confidence_term.shape)
+        #print('confidence_term = ', confidence_term.shape)
 
     #print('l1_error = {}'.format(error.shape))
     if confidence is None:
@@ -67,11 +68,10 @@ def classification_with_confidence_loss(pred_logit, gt, confidence,
       outputing zero confidence. Returns cross entropy loss and the confidence
       regularization term.
     """
-    logp = torch.nn.functional.log_softmax(pred_logit)
-    logpy = torch.gather(logp, 1, torch.tensor(gt))
-    classification_loss = -(logpy).mean()
+    classification_loss = torch.nn.functional.cross_entropy(pred_logit, gt)
     confidence_term = torch.mean(
-        torch.log(torch.max(confidence, torch.tensor(1e-10))))
+        torch.log(torch.max(confidence,
+                            torch.tensor(1e-10).cuda())))
 
     return classification_loss, -confidence_term
 
@@ -104,37 +104,35 @@ def min_distance_loss(
     if len(gt_shape) != 3:
         raise ValueError(
             "gt_control_point should have len of 3. {}".format(gt_shape))
-    if np.any([
-            p != gt for i, (p, gt) in enumerate(zip(pred_shape, gt_shape))
-            if i > 0
-    ]):
+    if pred_shape != gt_shape:
         raise ValueError("shapes do no match {} != {}".format(
             pred_shape, gt_shape))
 
     # N_pred x Ngt x M x 3
-    error = torch.expand_dims(pred_control_points, 1) - torch.expand_dims(
-        gt_control_points, 0)
+    error = pred_control_points.unsqueeze(1) - gt_control_points.unsqueeze(0)
     error = torch.sum(torch.abs(error),
                       -1)  # L1 distance of error (N_pred, N_gt, M)
     error = torch.mean(
         error, -1)  # average L1 for all the control points. (N_pred, N_gt)
-    min_distance_error = torch.min(
-        error, 0)  # take the min distance for each gt control point. (N_gt)
+
+    min_distance_error = error.min(1)[
+        0]  # take the min distance for each gt control point. (N_gt)
     #print('min_distance_error', get_shape(min_distance_error))
     if confidence is not None:
-        closest_index = torch.argmin(error, 0)  # (N_gt)
+        closest_index = torch.argmin(error, 1)  # (N_gt)
         #print('closest_index', get_shape(closest_index))
         selected_confidence = torch.nn.functional.one_hot(
-            closest_index)  # (N_gt, N_pred)
-        #print('selected_confidence', selected_confidence)
-        selected_confidence *= torch.expand_dims(confidence, 0)
+            closest_index,
+            num_classes=closest_index.shape[0]).float()  # (N_gt, N_pred)
+        selected_confidence *= confidence
         #print('selected_confidence', selected_confidence)
         selected_confidence = torch.sum(selected_confidence, -1)  # N_gt
         #print('selected_confidence', selected_confidence)
         min_distance_error *= selected_confidence
         confidence_term = torch.mean(
-            torch.log(torch.max(confidence,
-                                torch.tensor(1e-4)))) * confidence_weight
+            torch.log(torch.max(
+                confidence,
+                torch.tensor(1e-4).cuda()))) * confidence_weight
     else:
         confidence_term = 0.
 

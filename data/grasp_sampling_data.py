@@ -12,8 +12,7 @@ class GraspSamplingData(BaseDataset):
         self.device = torch.device('cuda:{}'.format(
             opt.gpu_ids[0])) if opt.gpu_ids else torch.device('cpu')
         self.root = opt.dataset_root_folder
-        self.dir = os.path.join(opt.dataset_root_folder, "grasps")
-        self.paths = self.make_dataset(self.dir)
+        self.paths = self.make_dataset()
         self.size = len(self.paths)
         #self.get_mean_std()
         opt.input_nc = self.ninput_channels
@@ -65,15 +64,3 @@ class GraspSamplingData(BaseDataset):
 
     def __len__(self):
         return self.size
-
-    @staticmethod
-    def make_dataset(path):
-        grasps = []
-        assert os.path.isdir(path), '%s is not a valid directory' % path
-
-        for root, _, fnames in sorted(os.walk(path)):
-            for fname in fnames:
-                path = os.path.join(root, fname)
-                grasps.append(path)
-
-        return grasps

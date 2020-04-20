@@ -2,6 +2,7 @@ import argparse
 import os
 from utils import utils
 import torch
+import shutil
 
 
 class BaseOptions:
@@ -52,11 +53,6 @@ class BaseOptions:
                                  type=int,
                                  default=float("inf"),
                                  help='Maximum number of samples per epoch')
-        # network params
-        self.parser.add_argument('--grasps_per_object',
-                                 type=int,
-                                 default=16,
-                                 help='Grasps per object')
         self.parser.add_argument('--num_threads',
                                  default=3,
                                  type=int,
@@ -66,13 +62,13 @@ class BaseOptions:
             type=str,
             default='0',
             help='gpu ids: e.g. 0  0,1,2, 0,2. use -1 for CPU')
-        self.parser.add_argument(
-            '--name',
-            type=str,
-            default='debug',
-            help=
-            'name of the experiment. It decides where to store samples and models'
-        )
+        #self.parser.add_argument(
+        #    '--name',
+        #    type=str,
+        #    default='debug',
+        #    help=
+        #    'name of the experiment. It decides where to store samples and models'
+        #)
         self.parser.add_argument('--checkpoints_dir',
                                  type=str,
                                  default='./checkpoints',
@@ -119,6 +115,11 @@ class BaseOptions:
             help=
             'if left blank uses all the categories in the <DATASET_ROOT_PATH>/splits/<category>.json, otherwise only chooses the categories that are set.'
         )
+        self.parser.add_argument('--blacklisted_categories',
+                                 type=str,
+                                 default='',
+                                 help='The opposite of allowed categories')
+
         self.parser.add_argument('--use_uniform_quaternions',
                                  type=int,
                                  default=0)
@@ -178,11 +179,55 @@ class BaseOptions:
             'Will not fill the dataset with a new grasp if it raises NoPositiveGraspsException'
         )
 
+    #    def parse(self):
+    #        if not self.initialized:
+    #            self.initialize()
+    #        self.opt, unknown = self.parser.parse_known_args()
+    #        self.opt.is_train = self.is_train  # train or test
+    #        self.opt.batch_size = self.opt.num_objects_per_batch * self.opt.num_grasps_per_object
+    #        str_ids = self.opt.gpu_ids.split(',')
+    #        self.opt.gpu_ids = []
+    #        for str_id in str_ids:
+    #            id = int(str_id)
+    #            if id >= 0:
+    #                self.opt.gpu_ids.append(id)
+    #        # set gpu ids
+    #        if len(self.opt.gpu_ids) > 0:
+    #            torch.cuda.set_device(self.opt.gpu_ids[0])
+    #
+    #        args = vars(self.opt)
+    #
+    #        if self.opt.seed is not None:
+    #            import numpy as np
+    #            import random
+    #            torch.manual_seed(self.opt.seed)
+    #            np.random.seed(self.opt.seed)
+    #            random.seed(self.opt.seed)
+    #
+    #        if self.is_train:
+    #            print('------------ Options -------------')
+    #            for k, v in sorted(args.items()):
+    #                print('%s: %s' % (str(k), str(v)))
+    #            print('-------------- End ----------------')
+    #
+    #            # save to the disk
+    #            expr_dir = os.path.join(self.opt.checkpoints_dir, self.opt.name)
+    #            utils.mkdir(expr_dir)
+    #
+    #            file_name = os.path.join(expr_dir, 'opt.txt')
+    #            with open(file_name, 'wt') as opt_file:
+    #                opt_file.write('------------ Options -------------\n')
+    #                for k, v in sorted(args.items()):
+    #                    opt_file.write('%s: %s\n' % (str(k), str(v)))
+    #                opt_file.write('-------------- End ----------------\n')
+    #        return self.opt
+
     def parse(self):
         if not self.initialized:
             self.initialize()
         self.opt, unknown = self.parser.parse_known_args()
         self.opt.is_train = self.is_train  # train or test
+
         self.opt.batch_size = self.opt.num_objects_per_batch * self.opt.num_grasps_per_object
         str_ids = self.opt.gpu_ids.split(',')
         self.opt.gpu_ids = []
@@ -210,8 +255,34 @@ class BaseOptions:
             print('-------------- End ----------------')
 
             # save to the disk
+            name = self.opt.arch
+            name += "_lr_" + str(self.opt.lr).split(".")[-1] + "_bs_" + str(
+                self.opt.batch_size)
+            name += "_scale_" + str(self.opt.model_scale) + "_npoints_" + str(
+                self.opt.pointnet_nclusters) + "_radius_" + str(
+                    self.opt.pointnet_radius).split(".")[-1]
+            if self.opt.arch == "vae" or self.opt.arch == "gan":
+                name += "_latent_size_" + str(self.opt.latent_size)
+
+            self.opt.name = name
             expr_dir = os.path.join(self.opt.checkpoints_dir, self.opt.name)
-            utils.mkdir(expr_dir)
+            if os.path.isdir(expr_dir) and not self.opt.continue_train:
+                option = "Directory " + expr_dir + " already exists and you have not chosen to continue to train.\nDo you want to override that training instance with a new one the press (Y/N)."
+                print(option)
+                while True:
+                    choice = input()
+                    if choice.upper() == "Y":
+                        print("Overriding directory " + expr_dir)
+                        shutil.rmtree(expr_dir)
+                        utils.mkdir(expr_dir)
+                        break
+                    elif choice.upper() == "N":
+                        print(
+                            "Terminating. Remember, if you want to continue to train from a saved instance then run the script with the flag --continue_train"
+                        )
+                        return None
+            else:
+                utils.mkdir(expr_dir)
 
             file_name = os.path.join(expr_dir, 'opt.txt')
             with open(file_name, 'wt') as opt_file:

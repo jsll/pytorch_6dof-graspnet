@@ -83,6 +83,11 @@ class OnlineObjectRendererMultiProcess(mp.Process):
             print('------------->', outcome)
             raise ValueError(outcome[1])
         else:
+            print(type(self._renderer))
+            print(len(outcome))
+            if len(outcome) == 1:
+                print(outcome)
+                input()
             return outcome[1]
 
     def change_object(self, cad_path, cad_scale):

@@ -200,6 +200,13 @@ class GraspSamplerVAE(GraspSampler):
 
 
 class GraspSamplerGAN(GraspSampler):
+    """
+    Altough the name says this sampler is based on the GAN formulation, it is
+    not actually optimizing based on the commonly known adversarial game.
+    Instead, it is based on the Implicit Maximum Likelihood Estimation from
+    https://arxiv.org/pdf/1809.09087.pdf which is similar to the GAN formulation
+    but with new insights that avoids e.g. mode collapses.
+    """
     def __init__(self,
                  model_scale,
                  pointnet_radius,
@@ -211,7 +218,7 @@ class GraspSamplerGAN(GraspSampler):
         self.latent_size = latent_size
 
     def sample_latent(self, batch_size):
-        return torch.rand(batch_size, self.latent_size)
+        return torch.rand(batch_size, self.latent_size).cuda()
 
     def forward(self, pc, grasps=None):
         z = self.sample_latent(pc.shape[0])
@@ -232,20 +239,20 @@ class GraspEvaluator(nn.Module):
         # position of the concatenated gripper and object point-clouds and an
         # extra binary feature, which is 0 for the object and 1 for the gripper,
         # to tell these point-clouds apart
-
-        self.evaluator = base_network(pointnet_radius, model_scale,
-                                      pointnet_nclusters, 4)
+        self.evaluator = base_network(pointnet_radius, pointnet_nclusters,
+                                      model_scale, 4)
         self.predictions_logits = nn.Linear(1024 * model_scale, 2)
         self.confidence = nn.Linear(1024 * model_scale, 1)
 
-    def forward_train(self, pc, gripper_pc):
-        pc, pc_features = self.merge_pc_and_gripper_pc(pc, gripper_pc)
-        x = self.evaluator(pc, pc_features)
-        return F.softmax(self.predictions_logits(x)), F.sigmoid(
-            self.confidence(x))
+    def evaluate(self, xyz, xyz_features):
+        for module in self.evaluator[0]:
+            xyz, xyz_features = module(xyz, xyz_features)
+        return self.evaluator[1](xyz_features.squeeze(-1))
 
-    def forward_test(self, pc, gripper_pc):
-        return self.forward_train(pc, gripper_pc)
+    def forward(self, pc, gripper_pc):
+        pc, pc_features = self.merge_pc_and_gripper_pc(pc, gripper_pc)
+        x = self.evaluate(pc, pc_features.contiguous())
+        return self.predictions_logits(x), torch.sigmoid(self.confidence(x))
 
     def merge_pc_and_gripper_pc(self, pc, gripper_pc):
         """
@@ -269,10 +276,9 @@ class GraspEvaluator(nn.Module):
         ]
         labels = torch.cat(labels, 0)
         labels.unsqueeze_(0)
-        labels = torch.tile(labels, [batch_size, 1, 1])
+        labels = labels.repeat(batch_size, 1, 1)
 
-        l0_points = torch.cat([l0_xyz, labels], -1).transpose(-1, 1)
-
+        l0_points = torch.cat([l0_xyz, labels.cuda()], -1).transpose(-1, 1)
         return l0_xyz, l0_points
 
 
