@@ -34,9 +34,9 @@ def make_parser():
         type=str,
         default=
         'checkpoints/evaluator_lr_0002_bs_10_scale_1_npoints_128_radius_02/')
-    parser.add_argument('--refinement',
+    parser.add_argument('--refinement_method',
                         choices={"gradient", "sampling"},
-                        default='gradient')
+                        default='sampling')
     parser.add_argument('--refine_steps', type=int, default=10)
 
     parser.add_argument('--npy_folder', type=str, default='demo/data/')
