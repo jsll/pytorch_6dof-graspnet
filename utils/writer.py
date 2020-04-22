@@ -1,6 +1,6 @@
 import os
 import time
-
+import numpy as np
 try:
     from tensorboardX import SummaryWriter
 except ImportError as error:
@@ -17,11 +17,12 @@ class Writer:
         self.testacc_log = os.path.join(self.save_dir, 'testacc_log.txt')
         self.start_logs()
         self.nexamples = 0
+        self.confidence_acc = 0
         self.ncorrect = 0
 
         if opt.is_train and not opt.no_vis and SummaryWriter is not None:
             self.display = SummaryWriter(
-                log_dir=os.path.join(self.opt.checkpoints_dir, self.opt.name) +
+                logdir=os.path.join(self.opt.checkpoints_dir, self.opt.name) +
                 "/tensorboard")  #comment=opt.name)
         else:
             self.display = None
@@ -80,26 +81,25 @@ class Writer:
 
     def print_acc(self, epoch, acc):
         """ prints test accuracy to terminal / file """
-        if type(acc) is list:
-            message = 'epoch: {}, TEST ACC: [{:.5} %]'.format(epoch, acc[0])
-            for (acc_type, acc_value) in zip(self.acc_types[1:], acc[1:]):
-                message += ', {} : [{:.5}]'.format(acc_type, acc_value)
-            message += '\n'
-        else:
+        if self.opt.arch == "evaluator":
             message = 'epoch: {}, TEST ACC: [{:.5} %]\n' \
                 .format(epoch, acc * 100)
+        else:
+            message = 'epoch: {}, TEST REC LOSS: [{:.5}]\n' \
+                .format(epoch, acc)
+
         print(message)
         with open(self.testacc_log, "a") as log_file:
             log_file.write('%s\n' % message)
 
     def plot_acc(self, acc, epoch):
         if self.display:
-            if type(acc) == list:
-                for (acc_type, acc_value) in zip(self.acc_types, acc):
-                    self.display.add_scalar('data/test_acc/' + acc_type,
-                                            acc_value, epoch)
+            if self.opt.arch == "evaluator":
+                self.display.add_scalar('data/test_acc/grasp_prediction', acc,
+                                        epoch)
             else:
-                self.display.add_scalar('data/test_acc', acc, epoch)
+                self.display.add_scalar('data/test_acc/grasp_reconstruction',
+                                        acc, epoch)
 
     def reset_counter(self):
         """
@@ -110,14 +110,11 @@ class Writer:
 
     def update_counter(self, ncorrect, nexamples):
         self.nexamples += nexamples
+        self.ncorrect += ncorrect
 
     @property
     def acc(self):
-        if self.opt.grasping:
-            acc_classification = float(self.ncorrect) / self.nexamples
-            return [acc_classification]
-        else:
-            return float(self.ncorrect) / self.nexamples
+        return float(self.ncorrect) / self.nexamples
 
     def close(self):
         if self.display is not None:

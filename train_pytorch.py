@@ -3,7 +3,8 @@ from options.train_options import TrainOptions
 from data import DataLoader
 from models import create_model
 from utils.writer import Writer
-#from test import run_test
+from test import run_test
+import threading
 
 
 def main():
@@ -16,11 +17,11 @@ def main():
     model = create_model(opt)
     writer = Writer(opt)
     total_steps = 0
+
     for epoch in range(opt.epoch_count, opt.niter + opt.niter_decay + 1):
         epoch_start_time = time.time()
         iter_data_time = time.time()
         epoch_iter = 0
-
         for i, data in enumerate(dataset):
             iter_start_time = time.time()
             if total_steps % opt.print_freq == 0:
@@ -37,7 +38,7 @@ def main():
                         model.confidence_loss
                     ]
                     loss_types = [
-                        "total_loss", "kl loss", "reconstruction loss",
+                        "total_loss", "kl_loss", "reconstruction_loss",
                         "confidence loss"
                     ]
                 elif opt.arch == "gan":
@@ -46,7 +47,7 @@ def main():
                         model.confidence_loss
                     ]
                     loss_types = [
-                        "total_loss", "reconstruction loss", "confidence loss"
+                        "total_loss", "reconstruction_loss", "confidence_loss"
                     ]
                 else:
                     loss = [
@@ -54,23 +55,24 @@ def main():
                         model.confidence_loss
                     ]
                     loss_types = [
-                        "total_loss", "classification loss", "confidence loss"
+                        "total_loss", "classification_loss", "confidence_loss"
                     ]
                 t = (time.time() - iter_start_time) / opt.batch_size
-                writer.print_current_losses(epoch, epoch_iter, loss, t, t_data,
-                                            loss_types)
-                writer.plot_loss(loss, epoch, epoch_iter, dataset_size,
-                                 loss_types)
+                #writer.print_current_losses(epoch, epoch_iter, loss, t, t_data,
+                #                            loss_types)
+                #writer.plot_loss(loss, epoch, epoch_iter, dataset_size,
+                #                 loss_types)
 
             if i % opt.save_latest_freq == 0:
-                print('saving the latest model (epoch %d, total_steps %d)' %
-                      (epoch, total_steps))
+                #print('saving the latest model (epoch %d, total_steps %d)' %
+                #      (epoch, total_steps))
                 model.save_network('latest')
 
             iter_data_time = time.time()
+
         if epoch % opt.save_epoch_freq == 0:
-            print('saving the model at the end of epoch %d, iters %d' %
-                  (epoch, total_steps))
+            #print('saving the model at the end of epoch %d, iters %d' %
+            #      (epoch, total_steps))
             model.save_network('latest')
             model.save_network(epoch)
 
@@ -82,7 +84,7 @@ def main():
             writer.plot_model_wts(model, epoch)
 
         #if epoch % opt.run_test_freq == 0:
-        #    acc = run_test(epoch)
+        #    acc = run_test(epoch, name=opt.name)
         #    writer.plot_acc(acc, epoch)
 
     writer.close()

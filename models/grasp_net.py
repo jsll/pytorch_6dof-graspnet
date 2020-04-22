@@ -42,7 +42,6 @@ class GraspNetModel:
                                               lr=opt.lr,
                                               betas=(opt.beta1, 0.999))
             self.scheduler = networks.get_scheduler(self.optimizer, opt)
-            utils.print_network(self.net)
         if not self.is_train or opt.continue_train:
             self.load_network(opt.which_epoch)
 
@@ -50,18 +49,24 @@ class GraspNetModel:
         input_pcs = torch.from_numpy(data['pc']).contiguous()
         input_grasps = torch.from_numpy(data['grasp_rt']).float()
         if self.opt.arch == "evaluator":
-            targets = torch.from_numpy(data['labels']).long()
+            targets = torch.from_numpy(data['labels']).float()
         else:
             targets = torch.from_numpy(data['target_cps']).float()
-        # set inputs
         self.pcs = input_pcs.to(self.device).requires_grad_(self.is_train)
         self.grasps = input_grasps.to(self.device).requires_grad_(
             self.is_train)
-        self.target = targets.to(self.device)
+        self.targets = targets.to(self.device)
+
+    def generate_grasps(self, pcs, z=None):
+        with torch.no_grad():
+            return self.net.module.generate_grasps(pcs, z=z)
+
+    def evaluate_grasps(self, pcs, gripper_pcs):
+        success, _ = self.net.module(pcs, gripper_pcs)
+        return torch.sigmoid(success)
 
     def forward(self):
-        out = self.net(self.pcs, self.grasps)
-        return out
+        return self.net(self.pcs, self.grasps, train=self.is_train)
 
     def backward(self, out):
         if self.opt.arch == 'vae':
@@ -70,7 +75,7 @@ class GraspNetModel:
                 predicted_cp, predicted_cp.shape[0])
             self.reconstruction_loss, self.confidence_loss = self.criterion[1](
                 predicted_cp,
-                self.target,
+                self.targets,
                 confidence=confidence,
                 confidence_weight=self.opt.confidence_weight)
             self.kl_loss = self.opt.kl_loss_weight * self.criterion[0](mu,
@@ -82,14 +87,14 @@ class GraspNetModel:
                 predicted_cp, predicted_cp.shape[0])
             self.reconstruction_loss, self.confidence_loss = self.criterion(
                 predicted_cp,
-                self.target,
+                self.targets,
                 confidence=confidence,
                 confidence_weight=self.opt.confidence_weight)
             self.loss = self.reconstruction_loss + self.confidence_loss
         elif self.opt.arch == 'evaluator':
             grasp_classification, confidence = out
             self.classification_loss, self.confidence_loss = self.criterion(
-                grasp_classification, self.target, confidence,
+                grasp_classification.squeeze(), self.targets, confidence,
                 self.opt.confidence_weight)
             self.loss = self.classification_loss + self.confidence_loss
 
@@ -112,9 +117,7 @@ class GraspNetModel:
         if isinstance(net, torch.nn.DataParallel):
             net = net.module
         print('loading the model from %s' % load_path)
-        # PyTorch newer than 0.4 (e.g., built from
-        # GitHub source), you can remove str() on self.device
-        state_dict = torch.load(load_path, map_location=str(self.device))
+        state_dict = torch.load(load_path, map_location=self.device)
         if hasattr(state_dict, '_metadata'):
             del state_dict._metadata
         net.load_state_dict(state_dict)
@@ -134,3 +137,32 @@ class GraspNetModel:
         self.scheduler.step()
         lr = self.optimizer.param_groups[0]['lr']
         print('learning rate = %.7f' % lr)
+
+    def test(self):
+        """tests model
+        returns: number correct and total number
+        """
+        with torch.no_grad():
+            out = self.forward()
+            prediction, confidence = out
+            # compute number of correct
+            if self.opt.arch == "vae":
+                reconstruction_loss, _ = self.criterion[1](
+                    prediction,
+                    self.targets,
+                    confidence=confidence,
+                    confidence_weight=self.opt.confidence_weight)
+                return reconstruction_loss, 1
+            elif self.opt.arch == "gan":
+                predicted_cp = utils.transform_control_points(
+                    prediction, prediction.shape[0])
+                reconstruction_loss, _ = self.criterion(
+                    predicted_cp,
+                    self.targets,
+                    confidence=confidence,
+                    confidence_weight=self.opt.confidence_weight)
+                return reconstruction_loss, 1
+            else:
+                _, predicted = torch.max(prediction, 1)
+                correct = (predicted == self.targets).sum().item()
+                return correct, len(self.targets)

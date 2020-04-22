@@ -16,6 +16,7 @@ class GraspSamplingData(BaseDataset):
         self.size = len(self.paths)
         #self.get_mean_std()
         opt.input_nc = self.ninput_channels
+        self.i = 0
 
     def __getitem__(self, index):
         path = self.paths[index]
@@ -31,11 +32,16 @@ class GraspSamplingData(BaseDataset):
             else:
                 return self.__getitem__(np.random.randint(0, self.size))
 
-        self.change_object(cad_path, cad_scale)
-        pc, camera_pose, _ = self.render_random_scene()
+        #self.change_object(cad_path, cad_scale)
+        #pc, camera_pose, _ = self.render_random_scene()
+        pc, camera_pose, _ = self.change_object_and_render(
+            cad_path,
+            cad_scale,
+            thread_id=torch.utils.data.get_worker_info().id
+            if torch.utils.data.get_worker_info() else 0)
+
         output_qualities = []
         output_grasps = []
-
         for iter in range(self.opt.num_grasps_per_object):
             selected_grasp_index = all_clusters[iter]
 
@@ -45,13 +51,13 @@ class GraspSamplingData(BaseDataset):
                 selected_grasp_index[1]]
             output_qualities.append(selected_quality)
             output_grasps.append(camera_pose.dot(selected_grasp))
-
         gt_control_points = utils.transform_control_points_numpy(
             np.array(output_grasps), self.opt.num_grasps_per_object, mode='rt')
 
         meta['pc'] = np.array([pc] * self.opt.num_grasps_per_object)[:, :, :3]
         meta['grasp_rt'] = np.array(output_grasps).reshape(
             len(output_grasps), -1)
+
         meta['pc_pose'] = np.array([utils.inverse_transform(camera_pose)] *
                                    self.opt.num_grasps_per_object)
         meta['cad_path'] = np.array([cad_path] *

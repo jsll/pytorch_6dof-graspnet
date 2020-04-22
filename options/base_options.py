@@ -3,6 +3,7 @@ import os
 from utils import utils
 import torch
 import shutil
+import yaml
 
 
 class BaseOptions:
@@ -62,13 +63,6 @@ class BaseOptions:
             type=str,
             default='0',
             help='gpu ids: e.g. 0  0,1,2, 0,2. use -1 for CPU')
-        #self.parser.add_argument(
-        #    '--name',
-        #    type=str,
-        #    default='debug',
-        #    help=
-        #    'name of the experiment. It decides where to store samples and models'
-        #)
         self.parser.add_argument('--checkpoints_dir',
                                  type=str,
                                  default='./checkpoints',
@@ -81,11 +75,6 @@ class BaseOptions:
         self.parser.add_argument('--seed',
                                  type=int,
                                  help='if specified, uses seed')
-        self.parser.add_argument(
-            '--training_splits',
-            type=str,
-            default='train',
-            help='can be any combination of train and test without any space.')
         self.parser.add_argument(
             '--gripper',
             type=str,
@@ -178,56 +167,33 @@ class BaseOptions:
             help=
             'Will not fill the dataset with a new grasp if it raises NoPositiveGraspsException'
         )
-
-    #    def parse(self):
-    #        if not self.initialized:
-    #            self.initialize()
-    #        self.opt, unknown = self.parser.parse_known_args()
-    #        self.opt.is_train = self.is_train  # train or test
-    #        self.opt.batch_size = self.opt.num_objects_per_batch * self.opt.num_grasps_per_object
-    #        str_ids = self.opt.gpu_ids.split(',')
-    #        self.opt.gpu_ids = []
-    #        for str_id in str_ids:
-    #            id = int(str_id)
-    #            if id >= 0:
-    #                self.opt.gpu_ids.append(id)
-    #        # set gpu ids
-    #        if len(self.opt.gpu_ids) > 0:
-    #            torch.cuda.set_device(self.opt.gpu_ids[0])
-    #
-    #        args = vars(self.opt)
-    #
-    #        if self.opt.seed is not None:
-    #            import numpy as np
-    #            import random
-    #            torch.manual_seed(self.opt.seed)
-    #            np.random.seed(self.opt.seed)
-    #            random.seed(self.opt.seed)
-    #
-    #        if self.is_train:
-    #            print('------------ Options -------------')
-    #            for k, v in sorted(args.items()):
-    #                print('%s: %s' % (str(k), str(v)))
-    #            print('-------------- End ----------------')
-    #
-    #            # save to the disk
-    #            expr_dir = os.path.join(self.opt.checkpoints_dir, self.opt.name)
-    #            utils.mkdir(expr_dir)
-    #
-    #            file_name = os.path.join(expr_dir, 'opt.txt')
-    #            with open(file_name, 'wt') as opt_file:
-    #                opt_file.write('------------ Options -------------\n')
-    #                for k, v in sorted(args.items()):
-    #                    opt_file.write('%s: %s\n' % (str(k), str(v)))
-    #                opt_file.write('-------------- End ----------------\n')
-    #        return self.opt
+        self.parser.add_argument(
+            '--balanced_data',
+            action='store_true',
+            default=False,
+        )
+        self.parser.add_argument(
+            '--confidence_weight',
+            type=float,
+            default=1.0,
+            help=
+            'initially I wanted to compute confidence for vae and evaluator outputs, '
+            'setting the confidence weight to 1. immediately pushes the confidence to 1.0.'
+        )
+        self.parser.add_argument(
+            '--run_mp',
+            action='store_true',
+            help='if true, we will train a grasping network')
 
     def parse(self):
         if not self.initialized:
             self.initialize()
         self.opt, unknown = self.parser.parse_known_args()
         self.opt.is_train = self.is_train  # train or test
-
+        if self.opt.is_train:
+            self.opt.dataset_split = "train"
+        else:
+            self.opt.dataset_split = "test"
         self.opt.batch_size = self.opt.num_objects_per_batch * self.opt.num_grasps_per_object
         str_ids = self.opt.gpu_ids.split(',')
         self.opt.gpu_ids = []
@@ -283,6 +249,10 @@ class BaseOptions:
                         return None
             else:
                 utils.mkdir(expr_dir)
+
+            yaml_path = os.path.join(expr_dir, 'opt.yaml')
+            with open(yaml_path, 'w') as yaml_file:
+                yaml.dump(args, yaml_file)
 
             file_name = os.path.join(expr_dir, 'opt.txt')
             with open(file_name, 'wt') as opt_file:

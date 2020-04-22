@@ -4,6 +4,7 @@ from data.base_dataset import BaseDataset, NoPositiveGraspsException
 import numpy as np
 from utils import utils
 import random
+import time
 try:
     from Queue import Queue
 except:
@@ -134,7 +135,7 @@ class GraspEvaluatorData(BaseDataset):
             output_qualities.append(quality)
             output_labels.append(0)
 
-        self._collision_hard_neg_queue[path] = self.collision_hard_neg_queue[
+        self.collision_hard_neg_queue[path] = self.collision_hard_neg_queue[
             path][num_hard_negative:]
 
         # Adding flex neg
@@ -152,13 +153,17 @@ class GraspEvaluatorData(BaseDataset):
             output_qualities.append(selected_quality)
             output_labels.append(0)
 
-        self.change_object(cad_path, cad_scale)
+        #self.change_object(cad_path, cad_scale)
         for iter in range(self.opt.num_grasps_per_object):
             if iter > 0:
                 output_pcs.append(np.copy(output_pcs[0]))
                 output_pc_poses.append(np.copy(output_pc_poses[0]))
             else:
-                pc, camera_pose, _ = self.render_random_scene()
+                pc, camera_pose, _ = self.change_object_and_render(
+                    cad_path,
+                    cad_scale,
+                    thread_id=torch.utils.data.get_worker_info().id
+                    if torch.utils.data.get_worker_info() else 0)
                 output_pcs.append(pc)
                 output_pc_poses.append(utils.inverse_transform(camera_pose))
 
@@ -261,13 +266,19 @@ class GraspEvaluatorData(BaseDataset):
             output_qualities.append(quality)
             output_labels.append(0)
 
-        self.change_object(cad_path, cad_scale)
         for iter in range(self.opt.num_grasps_per_object):
             if iter > 0:
                 output_pcs.append(np.copy(output_pcs[0]))
                 output_pc_poses.append(np.copy(output_pc_poses[0]))
             else:
-                pc, camera_pose, _ = self.render_random_scene()
+                pc, camera_pose, _ = self.change_object_and_render(
+                    cad_path,
+                    cad_scale,
+                    thread_id=torch.utils.data.get_worker_info().id
+                    if torch.utils.data.get_worker_info() else 0)
+                #self.change_object(cad_path, cad_scale)
+                #pc, camera_pose, _ = self.render_random_scene()
+
                 output_pcs.append(pc)
                 output_pc_poses.append(utils.inverse_transform(camera_pose))
 
@@ -278,5 +289,4 @@ class GraspEvaluatorData(BaseDataset):
         output_labels = np.asarray(output_labels, dtype=np.int32)
         output_qualities = np.asarray(output_qualities, dtype=np.float32)
         output_pc_poses = np.asarray(output_pc_poses, dtype=np.float32)
-
         return output_pcs, output_grasps, output_labels, output_qualities, output_pc_poses, output_cad_paths, output_cad_scales

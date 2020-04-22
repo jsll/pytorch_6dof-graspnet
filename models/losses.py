@@ -68,10 +68,11 @@ def classification_with_confidence_loss(pred_logit, gt, confidence,
       outputing zero confidence. Returns cross entropy loss and the confidence
       regularization term.
     """
-    classification_loss = torch.nn.functional.cross_entropy(pred_logit, gt)
+    classification_loss = torch.nn.functional.binary_cross_entropy_with_logits(
+        pred_logit, gt)
     confidence_term = torch.mean(
         torch.log(torch.max(confidence,
-                            torch.tensor(1e-10).cuda())))
+                            torch.tensor(1e-10).cuda()))) * confidence_weight
 
     return classification_loss, -confidence_term
 
@@ -160,3 +161,9 @@ def kl_divergence(mu, log_sigma):
     """
     return torch.mean(
         -.5 * torch.sum(1. + log_sigma - mu**2 - torch.exp(log_sigma), dim=-1))
+
+
+def confidence_loss(confidence, confidence_weight):
+    return torch.mean(
+        torch.log(torch.max(confidence,
+                            torch.tensor(1e-10).cuda()))) * confidence_weight

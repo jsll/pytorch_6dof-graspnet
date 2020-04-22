@@ -182,7 +182,7 @@ class GraspSamplerVAE(GraspSampler):
         if train:
             return self.forward_train(pc, grasp)
         else:
-            return self.forward_test(pc)
+            return self.forward_test(pc, grasp)
 
     def forward_train(self, pc, grasp):
         input_features = torch.cat(
@@ -194,9 +194,20 @@ class GraspSamplerVAE(GraspSampler):
         qt, confidence = self.decode(pc, z)
         return qt, confidence, mu, logvar
 
-    def forward_test(self, pc):
-        z = torch.randn((pc.shape[0], self.latent_size))
-        return self.decode(pc, z)
+    def forward_test(self, pc, grasp):
+        input_features = torch.cat(
+            (pc, grasp.unsqueeze(1).expand(-1, pc.shape[1], -1)),
+            -1).transpose(-1, 1).contiguous()
+        z = self.encode(pc, input_features)
+        mu, _ = self.bottleneck(z)
+        qt, confidence = self.decode(pc, mu)
+        return qt, confidence
+
+    def generate_grasps(self, pc, z=None):
+        if z is None:
+            z = torch.randn((pc.shape[0], self.latent_size))
+        qt, confidence = self.decode(pc, z)
+        return qt, confidence, z.squeeze()
 
 
 class GraspSamplerGAN(GraspSampler):
@@ -220,9 +231,15 @@ class GraspSamplerGAN(GraspSampler):
     def sample_latent(self, batch_size):
         return torch.rand(batch_size, self.latent_size).cuda()
 
-    def forward(self, pc, grasps=None):
+    def forward(self, pc, grasps=None, train=True):
         z = self.sample_latent(pc.shape[0])
         return self.decode(pc, z)
+
+    def generate_grasps(self, pc, z=None):
+        if z is None:
+            z = self.sample_latent(pc.shape[0])
+        qt, confidence = self.decode(pc, z)
+        return qt, confidence, z.squeeze()
 
 
 class GraspEvaluator(nn.Module):
@@ -241,7 +258,7 @@ class GraspEvaluator(nn.Module):
         # to tell these point-clouds apart
         self.evaluator = base_network(pointnet_radius, pointnet_nclusters,
                                       model_scale, 4)
-        self.predictions_logits = nn.Linear(1024 * model_scale, 2)
+        self.predictions_logits = nn.Linear(1024 * model_scale, 1)
         self.confidence = nn.Linear(1024 * model_scale, 1)
 
     def evaluate(self, xyz, xyz_features):
@@ -249,7 +266,7 @@ class GraspEvaluator(nn.Module):
             xyz, xyz_features = module(xyz, xyz_features)
         return self.evaluator[1](xyz_features.squeeze(-1))
 
-    def forward(self, pc, gripper_pc):
+    def forward(self, pc, gripper_pc, train=True):
         pc, pc_features = self.merge_pc_and_gripper_pc(pc, gripper_pc)
         x = self.evaluate(pc, pc_features.contiguous())
         return self.predictions_logits(x), torch.sigmoid(self.confidence(x))

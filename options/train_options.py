@@ -72,23 +72,10 @@ class TrainOptions(BaseOptions):
             default=50,
             help='multiply by a gamma every lr_decay_iters iterations')
         self.parser.add_argument('--kl_loss_weight', type=float, default=0.01)
-        self.parser.add_argument(
-            '--confidence_weight',
-            type=float,
-            default=1.0,
-            help=
-            'initially I wanted to compute confidence for vae and evaluator outputs, '
-            'setting the confidence weight to 1. immediately pushes the confidence to 1.0.'
-        )
         self.parser.add_argument('--no_vis',
                                  action='store_true',
                                  help='will not use tensorboard')
         self.parser.add_argument('--verbose_plot',
                                  action='store_true',
                                  help='plots network weights, etc.')
-        self.parser.add_argument(
-            '--balanced_data',
-            action='store_true',
-            default=False,
-        )
         self.is_train = True

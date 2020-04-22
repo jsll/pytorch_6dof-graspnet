@@ -8,6 +8,7 @@ from utils.sample import Object
 from utils import utils
 import glob
 from renderer.online_object_renderer import OnlineObjectRendererMultiProcess, OnlineObjectRenderer
+import threading
 
 
 class NoPositiveGraspsException(Exception):
@@ -40,7 +41,7 @@ class BaseDataset(data.Dataset):
         self.collision_hard_neg_min_rotation = collision_hard_neg_min_rotation
         self.collision_hard_neg_max_rotation = collision_hard_neg_max_rotation
         self.collision_hard_neg_num_perturbations = collision_hard_neg_num_perturbations
-
+        self.lock = threading.Lock()
         for i in range(3):
             assert (collision_hard_neg_min_rotation[i] <=
                     collision_hard_neg_max_rotation[i])
@@ -92,6 +93,26 @@ class BaseDataset(data.Dataset):
 
         in_camera_pose = copy.deepcopy(camera_pose)
         _, _, pc, camera_pose = self.renderer.render(in_camera_pose)
+        pc = self.apply_dropout(pc)
+        pc = utils.regularize_pc_point_count(pc, self.opt.npoints)
+        pc_mean = np.mean(pc, 0, keepdims=True)
+        pc[:, :3] -= pc_mean[:, :3]
+        camera_pose[:3, 3] -= pc_mean[0, :3]
+
+        return pc, camera_pose, in_camera_pose
+
+    def change_object_and_render(self,
+                                 cad_path,
+                                 cad_scale,
+                                 camera_pose=None,
+                                 thread_id=0):
+        if camera_pose is None:
+            viewing_index = np.random.randint(0, high=len(self.all_poses))
+            camera_pose = self.all_poses[viewing_index]
+
+        in_camera_pose = copy.deepcopy(camera_pose)
+        _, _, pc, camera_pose = self.renderer.change_and_render(
+            cad_path, cad_scale, in_camera_pose, thread_id)
         pc = self.apply_dropout(pc)
         pc = utils.regularize_pc_point_count(pc, self.opt.npoints)
         pc_mean = np.mean(pc, 0, keepdims=True)
@@ -287,7 +308,8 @@ class BaseDataset(data.Dataset):
             if self.opt.allowed_categories == '':
                 should_go_through = True
                 if self.opt.blacklisted_categories != '':
-                    if blacklisted_categories.find(split_file[:-5]) >= 0:
+                    if self.opt.blacklisted_categories.find(
+                            split_file[:-5]) >= 0:
                         should_go_through = False
             else:
                 if self.opt.allowed_categories.find(split_file[:-5]) >= 0:
@@ -299,9 +321,9 @@ class BaseDataset(data.Dataset):
                                  self.opt.grasps_folder_name, f)
                     for f in json.load(
                         open(
-                            os.path.join(self.opt.dataset_root_folder, self.
-                                         opt.splits_folder_name, split_file)))[
-                                             self.opt.training_splits]
+                            os.path.join(self.opt.dataset_root_folder,
+                                         self.opt.splits_folder_name,
+                                         split_file)))[self.opt.dataset_split]
                 ]
         return files
 

@@ -7,6 +7,8 @@ import trimesh.transformations as tra
 import json
 from utils import sample
 import torch
+import yaml
+from easydict import EasyDict as edict
 
 GRIPPER_PC = np.load('gripper_models/panda_pc.npy',
                      allow_pickle=True).item()['points']
@@ -296,10 +298,11 @@ def get_control_point_tensor(batch_size, use_torch=True):
     return control_points
 
 
-def transform_control_points(gt_grasps,
-                             batch_size,
-                             mode='qt',
-                             scope='transform_gt_control_points'):
+def transform_control_points(
+        gt_grasps,
+        batch_size,
+        mode='qt',
+):
     """
       Transforms canonical points using gt_grasps.
       mode = 'qt' expects gt_grasps to have (batch_size x 7) where each 
@@ -437,6 +440,7 @@ def rotate_point_by_quaternion(point, q):
 
 def tc_rotation_matrix(az, el, th, batched=False):
     if batched:
+
         cx = torch.cos(torch.reshape(az, [-1, 1]))
         cy = torch.cos(torch.reshape(el, [-1, 1]))
         cz = torch.cos(torch.reshape(th, [-1, 1]))
@@ -477,3 +481,125 @@ def tc_rotation_matrix(az, el, th, batched=False):
 def mkdir(path):
     if not os.path.isdir(path):
         os.makedirs(path)
+
+
+def control_points_from_rot_and_trans(grasp_eulers,
+                                      grasp_translations,
+                                      device="cpu"):
+    rot = tc_rotation_matrix(grasp_eulers[:, 0],
+                             grasp_eulers[:, 1],
+                             grasp_eulers[:, 2],
+                             batched=True)
+    grasp_pc = get_control_point_tensor(grasp_eulers.shape[0]).to(device)
+    grasp_pc = torch.einsum('ijk,ikk->ijk', grasp_pc, rot)
+    grasp_pc += grasp_translations.unsqueeze(1).expand(-1, grasp_pc.shape[1],
+                                                       -1)
+    return grasp_pc
+
+
+def rot_and_trans_to_grasps(euler_angles, translations, selection_mask):
+    grasps = []
+    refine_indexes, sample_indexes = np.where(selection_mask)
+    for refine_index, sample_index in zip(refine_indexes, sample_indexes):
+        rt = tra.euler_matrix(*euler_angles[refine_index, sample_index, :])
+        rt[:3, 3] = translations[refine_index, sample_index, :]
+        grasps.append(rt)
+    return grasps
+
+
+def convert_qt_to_rt(grasps):
+    Ts = grasps[:, 4:]
+    Rs = qeuler(grasps[:, :4], "xyz")
+    return Rs, Ts
+
+
+def qeuler(q, order, epsilon=0):
+    """
+    Convert quaternion(s) q to Euler angles.
+    Expects a tensor of shape (*, 4), where * denotes any number of dimensions.
+    Returns a tensor of shape (*, 3).
+    """
+    assert q.shape[-1] == 4
+
+    original_shape = list(q.shape)
+    original_shape[-1] = 3
+    q = q.view(-1, 4)
+
+    q0 = q[:, 0]
+    q1 = q[:, 1]
+    q2 = q[:, 2]
+    q3 = q[:, 3]
+
+    if order == 'xyz':
+        x = torch.atan2(2 * (q0 * q1 - q2 * q3), 1 - 2 * (q1 * q1 + q2 * q2))
+        y = torch.asin(
+            torch.clamp(2 * (q1 * q3 + q0 * q2), -1 + epsilon, 1 - epsilon))
+        z = torch.atan2(2 * (q0 * q3 - q1 * q2), 1 - 2 * (q2 * q2 + q3 * q3))
+    elif order == 'yzx':
+        x = torch.atan2(2 * (q0 * q1 - q2 * q3), 1 - 2 * (q1 * q1 + q3 * q3))
+        y = torch.atan2(2 * (q0 * q2 - q1 * q3), 1 - 2 * (q2 * q2 + q3 * q3))
+        z = torch.asin(
+            torch.clamp(2 * (q1 * q2 + q0 * q3), -1 + epsilon, 1 - epsilon))
+    elif order == 'zxy':
+        x = torch.asin(
+            torch.clamp(2 * (q0 * q1 + q2 * q3), -1 + epsilon, 1 - epsilon))
+        y = torch.atan2(2 * (q0 * q2 - q1 * q3), 1 - 2 * (q1 * q1 + q2 * q2))
+        z = torch.atan2(2 * (q0 * q3 - q1 * q2), 1 - 2 * (q1 * q1 + q3 * q3))
+    elif order == 'xzy':
+        x = torch.atan2(2 * (q0 * q1 + q2 * q3), 1 - 2 * (q1 * q1 + q3 * q3))
+        y = torch.atan2(2 * (q0 * q2 + q1 * q3), 1 - 2 * (q2 * q2 + q3 * q3))
+        z = torch.asin(
+            torch.clamp(2 * (q0 * q3 - q1 * q2), -1 + epsilon, 1 - epsilon))
+    elif order == 'yxz':
+        x = torch.asin(
+            torch.clamp(2 * (q0 * q1 - q2 * q3), -1 + epsilon, 1 - epsilon))
+        y = torch.atan2(2 * (q1 * q3 + q0 * q2), 1 - 2 * (q1 * q1 + q2 * q2))
+        z = torch.atan2(2 * (q1 * q2 + q0 * q3), 1 - 2 * (q1 * q1 + q3 * q3))
+    elif order == 'zyx':
+        x = torch.atan2(2 * (q0 * q1 + q2 * q3), 1 - 2 * (q1 * q1 + q2 * q2))
+        y = torch.asin(
+            torch.clamp(2 * (q0 * q2 - q1 * q3), -1 + epsilon, 1 - epsilon))
+        z = torch.atan2(2 * (q0 * q3 + q1 * q2), 1 - 2 * (q2 * q2 + q3 * q3))
+    else:
+        raise ValueError("Invalid order " + order)
+
+    return torch.stack((x, y, z), dim=1).view(original_shape)
+
+
+def read_checkpoint_args(folder_path):
+    return edict(yaml.load(open(os.path.join(folder_path, 'opt.yaml'))))
+
+
+def choose_grasps_better_than_threshold(eulers,
+                                        translations,
+                                        probs,
+                                        threshold=0.7):
+    """
+      Chooses the grasps that have scores higher than the input threshold.
+    """
+    print('choose_better_than_threshold threshold=', threshold)
+    return np.asarray(probs >= threshold, dtype=np.float32)
+
+
+def choose_grasps_better_than_threshold_in_sequence(eulers,
+                                                    translations,
+                                                    probs,
+                                                    threshold=0.7):
+    """
+      Chooses the grasps with the maximum score in the sequence of grasp refinements.
+    """
+    output = np.zeros(probs.shape, dtype=np.float32)
+    max_index = np.argmax(probs, 0)
+    max_value = np.max(probs, 0)
+    # print(max_value)
+    # print(max_index)
+    for i in range(probs.shape[1]):
+        if max_value[i] > threshold:
+            output[max_index[i]][i] = 1.
+    return output
+
+
+def denormalize_grasps(grasps, mean=0, std=1):
+    temp = 1 / std
+    for grasp in grasps:
+        grasp[:3, 3] = (std * grasp[:3, 3] + mean)

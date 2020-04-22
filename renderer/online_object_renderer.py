@@ -18,12 +18,14 @@ import math
 import sys
 import argparse
 import os
+import time
 # Uncomment following line for headless rendering
-# os.environ["PYOPENGL_PLATFORM"] = "egl"
+#os.environ["PYOPENGL_PLATFORM"] = "egl"
 import pyrender
 
 import trimesh
 import trimesh.transformations as tra
+from multiprocessing import Manager
 import multiprocessing as mp
 
 # Cover python 2.7 and python 3.5
@@ -41,6 +43,9 @@ class OnlineObjectRendererMultiProcess(mp.Process):
         self._queue = mp.Queue()
         self._output_queue = mp.Queue()
         self._should_stop = False
+        #self._lock = threading.Lock()
+        manager = Manager()
+        self._rendering_dict = manager.dict()
 
     def run(self):
         self._renderer = OnlineObjectRenderer(caching=self._caching)
@@ -53,8 +58,11 @@ class OnlineObjectRendererMultiProcess(mp.Process):
                 self._process_render_request(request)
             elif request[0] == 'change_object':
                 self._process_change_object_request(request)
+            elif request[0] == 'change_object_and_render':
+                self._process_change_object_and_render_request(request)
             else:
-                raise ValueError('unknown requst', request)
+                raise ValueError('unknown request', request)
+        self._renderer.renderer.delete()
 
     def _process_render_request(self, render_request):
         pose = render_request[1]
@@ -74,6 +82,23 @@ class OnlineObjectRendererMultiProcess(mp.Process):
         except Exception as e:
             self._output_queue.put(('no', str(e)))
 
+    def _process_change_object_and_render_request(
+            self, change_object_and_render_request):
+        #print('change object', change_object_request)
+        cad_path = change_object_and_render_request[1]
+        cad_scale = change_object_and_render_request[2]
+        pose = change_object_and_render_request[3]
+        thread_id = change_object_and_render_request[4]
+        try:
+            output = self._renderer.change_object(cad_path, cad_scale)
+            output = self._renderer.render(pose)
+            self._output_queue.put(('ok', thread_id, output))
+            self._rendering_dict[thread_id] = ('ok', thread_id, output)
+        except Exception as e:
+            self._output_queue.put(('no', thread_id, str(e)))
+            #self._rendering_dict[thread_id] = str(e)
+            self._rendering_dict[thread_id] = ('no', thread_id, str(e))
+
     def render(self, pose):
         self._queue.put(('render', pose))
 
@@ -82,12 +107,10 @@ class OnlineObjectRendererMultiProcess(mp.Process):
         if outcome[0] != 'ok':
             print('------------->', outcome)
             raise ValueError(outcome[1])
+        elif len(outcome) == 1:
+            print('------------->', outcome)
+            raise ValueError("Did not render scene")
         else:
-            print(type(self._renderer))
-            print(len(outcome))
-            if len(outcome) == 1:
-                print(outcome)
-                input()
             return outcome[1]
 
     def change_object(self, cad_path, cad_scale):
@@ -97,6 +120,26 @@ class OnlineObjectRendererMultiProcess(mp.Process):
         if outcome[0] != 'ok':
             raise ValueError(outcome[1])
 
+    def change_and_render(self, cad_path, cad_scale, pose, thread_id):
+        self._queue.put(
+            ('change_object_and_render', cad_path, cad_scale, pose, thread_id))
+        timeout = time.time() + 10
+        timout_error = True
+        while time.time() < timeout:
+            if thread_id in self._rendering_dict:
+                outcome = self._rendering_dict.pop(thread_id)
+                timeout_error = False
+                break
+
+        if timeout_error:
+            raise RuntimeError("Error when rendering")
+        if outcome[0] != 'ok':
+            raise ValueError(outcome[2])
+        elif outcome[1] != thread_id:
+            raise ValueError("Race condition")
+        else:
+            return outcome[2]
+
 
 class OnlineObjectRenderer:
     def __init__(self, fov=np.pi / 6, caching=True):
@@ -105,6 +148,8 @@ class OnlineObjectRenderer:
           fov: float, 
         """
         self._fov = fov
+        self._fy = self._fx = 1 / (0.5 / np.tan(self._fov * 0.5)
+                                   )  # aspectRatio is one.
         self.mesh = None
         self._scene = None
         self.tmesh = None
@@ -159,7 +204,6 @@ class OnlineObjectRenderer:
 
         if not self._caching:
             self._cache = {}
-
         self._current_context = self._load_object(path, scale)
         self._scene.add_node(self._current_context['node'])
 
@@ -167,7 +211,6 @@ class OnlineObjectRenderer:
         return self._current_context
 
     def _to_pointcloud(self, depth):
-        fy = fx = 0.5 / np.tan(self._fov * 0.5)  # aspectRatio is one.
         height = depth.shape[0]
         width = depth.shape[1]
 
@@ -179,17 +222,32 @@ class OnlineObjectRenderer:
         normalized_x = (x.astype(np.float32) - width * 0.5) / width
         normalized_y = (y.astype(np.float32) - height * 0.5) / height
 
-        world_x = normalized_x * depth[y, x] / fx
-        world_y = normalized_y * depth[y, x] / fy
+        world_x = self._fx * normalized_x * depth[y, x]
+        world_y = self._fy * normalized_y * depth[y, x]
         world_z = depth[y, x]
         ones = np.ones(world_z.shape[0], dtype=np.float32)
 
         return np.vstack((world_x, world_y, world_z, ones)).T
 
+    def change_and_render(self, pose, render_pc=True):
+        if self._current_context is None:
+            raise ValueError('invoke change_object first')
+        transferred_pose = pose.copy()
+        transferred_pose[2, 3] = self._current_context['distance']
+        self._scene.set_pose(self._current_context['node'], transferred_pose)
+
+        color, depth = self.renderer.render(self._scene)
+
+        if render_pc:
+            pc = self._to_pointcloud(depth)
+        else:
+            pc = None
+
+        return color, depth, pc, transferred_pose
+
     def render(self, pose, render_pc=True):
         if self._current_context is None:
             raise ValueError('invoke change_object first')
-
         transferred_pose = pose.copy()
         transferred_pose[2, 3] = self._current_context['distance']
         self._scene.set_pose(self._current_context['node'], transferred_pose)
