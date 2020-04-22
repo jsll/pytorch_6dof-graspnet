@@ -12,7 +12,6 @@ try:
 except:
     pass
 import numpy as np
-from grasp_data_reader import regularize_pc_point_count
 import trimesh.transformations as tra
 import trimesh
 
@@ -45,22 +44,23 @@ def propose_grasps(pc, radius, num_grasps=1, vis=False):
     for _ in range(num_grasps):
         center_index = np.random.randint(pc.shape[0])
         center_point = pc[center_index, :].copy()
-        d = np.sqrt(np.sum(np.square(pc - np.expand_dims(center_point, 0)), -1))
+        d = np.sqrt(np.sum(np.square(pc - np.expand_dims(center_point, 0)),
+                           -1))
         index = np.where(d < radius)[0]
         neighbors = pc[index, :]
-        
+
         eigen_values, eigen_vectors = cov_matrix(center_point, neighbors)
         direction = eigen_vectors[:, 2]
 
         direction = choose_direction(direction, center_point)
-        
-        surface_orientation = trimesh.geometry.align_vectors([0,0,1], direction)
+
+        surface_orientation = trimesh.geometry.align_vectors([0, 0, 1],
+                                                             direction)
         roll_orientation = tra.quaternion_matrix(
-            tra.quaternion_about_axis(np.random.uniform(0, 2*np.pi), [0, 0, 1])
-        )
+            tra.quaternion_about_axis(np.random.uniform(0, 2 * np.pi),
+                                      [0, 0, 1]))
         gripper_transform = surface_orientation.dot(roll_orientation)
         gripper_transform[:3, 3] = center_point
-
 
         translation_transform = np.eye(4)
         translation_transform[2, 3] = -np.random.uniform(0.0669, 0.1122)
@@ -68,10 +68,8 @@ def propose_grasps(pc, radius, num_grasps=1, vis=False):
         gripper_transform = gripper_transform.dot(translation_transform)
         output_grasps.append(gripper_transform.copy())
 
-
     if vis:
         draw_scene(pc, grasps=output_grasps)
         mlab.show()
-    
-    return np.asarray(output_grasps)
 
+    return np.asarray(output_grasps)
