@@ -201,7 +201,8 @@ def draw_scene(pc,
                 gripper_color = (0.0, 1.0, 0.0)
 
         if show_gripper_mesh:
-            gripper_mesh = sample.Object('panda_gripper.obj').mesh
+            gripper_mesh = sample.Object(
+                'gripper_models/panda_gripper.obj').mesh
             gripper_mesh.apply_transform(g)
             mlab.triangular_mesh(
                 gripper_mesh.vertices[:, 0],
