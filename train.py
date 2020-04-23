@@ -58,21 +58,21 @@ def main():
                         "total_loss", "classification_loss", "confidence_loss"
                     ]
                 t = (time.time() - iter_start_time) / opt.batch_size
-                #writer.print_current_losses(epoch, epoch_iter, loss, t, t_data,
-                #                            loss_types)
-                #writer.plot_loss(loss, epoch, epoch_iter, dataset_size,
-                #                 loss_types)
+                writer.print_current_losses(epoch, epoch_iter, loss, t, t_data,
+                                            loss_types)
+                writer.plot_loss(loss, epoch, epoch_iter, dataset_size,
+                                 loss_types)
 
             if i % opt.save_latest_freq == 0:
-                #print('saving the latest model (epoch %d, total_steps %d)' %
-                #      (epoch, total_steps))
+                print('saving the latest model (epoch %d, total_steps %d)' %
+                      (epoch, total_steps))
                 model.save_network('latest')
 
             iter_data_time = time.time()
 
         if epoch % opt.save_epoch_freq == 0:
-            #print('saving the model at the end of epoch %d, iters %d' %
-            #      (epoch, total_steps))
+            print('saving the model at the end of epoch %d, iters %d' %
+                  (epoch, total_steps))
             model.save_network('latest')
             model.save_network(epoch)
 
