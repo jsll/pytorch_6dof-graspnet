@@ -125,22 +125,31 @@ class GraspNetModel:
         if isinstance(net, torch.nn.DataParallel):
             net = net.module
         print('loading the model from %s' % load_path)
-        state_dict = torch.load(load_path, map_location=self.device)
-        if hasattr(state_dict, '_metadata'):
-            del state_dict._metadata
-        net.load_state_dict(state_dict)
-        if not train:
+        checkpoint = torch.load(load_path, map_location=self.device)
+        if hasattr(checkpoint['model_state_dict'], '_metadata'):
+            del checkpoint['model_state_dict']._metadata
+        net.load_state_dict(checkpoint['model_state_dict'])
+        if train:
+            self.optimizer.load_state_dict(checkpoint['optimizer_state_dict'])
+            self.scheduler.load_state_dict(checkpoint['scheduler_state_dict'])
+            self.opt.epoch_count = checkpoint["epoch"]
+        else:
             net.eval()
 
-    def save_network(self, which_epoch):
+    def save_network(self, net_name, epoch_num):
         """save model to disk"""
-        save_filename = '%s_net.pth' % (which_epoch)
+        save_filename = '%s_net.pth' % (net_name)
         save_path = join(self.save_dir, save_filename)
+        torch.save(
+            {
+                'epoch': epoch_num + 1,
+                'model_state_dict': self.net.module.cpu().state_dict(),
+                'optimizer_state_dict': self.optimizer.state_dict(),
+                'scheduler_state_dict': self.scheduler.state_dict(),
+            }, save_path)
+
         if len(self.gpu_ids) > 0 and torch.cuda.is_available():
-            torch.save(self.net.module.cpu().state_dict(), save_path)
             self.net.cuda(self.gpu_ids[0])
-        else:
-            torch.save(self.net.cpu().state_dict(), save_path)
 
     def update_learning_rate(self):
         """update learning rate (called once every epoch)"""

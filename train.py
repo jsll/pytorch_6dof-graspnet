@@ -17,7 +17,6 @@ def main():
     model = create_model(opt)
     writer = Writer(opt)
     total_steps = 0
-
     for epoch in range(opt.epoch_count, opt.niter + opt.niter_decay + 1):
         epoch_start_time = time.time()
         iter_data_time = time.time()
@@ -66,15 +65,15 @@ def main():
             if i % opt.save_latest_freq == 0:
                 print('saving the latest model (epoch %d, total_steps %d)' %
                       (epoch, total_steps))
-                model.save_network('latest')
+                model.save_network('latest', epoch)
 
             iter_data_time = time.time()
 
         if epoch % opt.save_epoch_freq == 0:
             print('saving the model at the end of epoch %d, iters %d' %
                   (epoch, total_steps))
-            model.save_network('latest')
-            model.save_network(epoch)
+            model.save_network('latest', epoch)
+            model.save_network(str(epoch), epoch)
 
         print('End of epoch %d / %d \t Time Taken: %d sec' %
               (epoch, opt.niter + opt.niter_decay,
