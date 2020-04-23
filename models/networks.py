@@ -69,17 +69,17 @@ def init_net(net, init_type, init_gain, gpu_ids):
     return net
 
 
-def define_classifier(opt, gpu_ids, arch, init_type, init_gain):
+def define_classifier(opt, gpu_ids, arch, init_type, init_gain, device):
     net = None
     if arch == 'vae':
         net = GraspSamplerVAE(opt.model_scale, opt.pointnet_radius,
-                              opt.pointnet_nclusters, opt.latent_size)
+                              opt.pointnet_nclusters, opt.latent_size, device)
     elif arch == 'gan':
         net = GraspSamplerGAN(opt.model_scale, opt.pointnet_radius,
-                              opt.pointnet_nclusters, opt.latent_size)
+                              opt.pointnet_nclusters, opt.latent_size, device)
     elif arch == 'evaluator':
         net = GraspEvaluator(opt.model_scale, opt.pointnet_radius,
-                             opt.pointnet_nclusters)
+                             opt.pointnet_nclusters, device)
     else:
         raise NotImplementedError('model name [%s] is not recognized' % arch)
     return init_net(net, init_type, init_gain, gpu_ids)
@@ -101,8 +101,10 @@ def define_loss(opt):
 
 
 class GraspSampler(nn.Module):
-    def __init__(self):
+    def __init__(self, device):
         super(GraspSampler, self).__init__()
+
+        self.device = device
 
     def create_decoder(self, model_scale, pointnet_radius, pointnet_nclusters,
                        num_input_features):
@@ -140,8 +142,9 @@ class GraspSamplerVAE(GraspSampler):
                  model_scale,
                  pointnet_radius=0.02,
                  pointnet_nclusters=128,
-                 latent_size=2):
-        super(GraspSamplerVAE, self).__init__()
+                 latent_size=2,
+                 device="cpu"):
+        super(GraspSamplerVAE, self).__init__(device)
         self.create_encoder(model_scale, pointnet_radius, pointnet_nclusters)
 
         self.create_decoder(model_scale, pointnet_radius, pointnet_nclusters,
@@ -203,9 +206,12 @@ class GraspSamplerVAE(GraspSampler):
         qt, confidence = self.decode(pc, mu)
         return qt, confidence
 
+    def sample_latent(self, batch_size):
+        return torch.randn(batch_size, self.latent_size).to(self.device)
+
     def generate_grasps(self, pc, z=None):
         if z is None:
-            z = torch.randn((pc.shape[0], self.latent_size))
+            z = self.sample_latent(pc.shape[0])
         qt, confidence = self.decode(pc, z)
         return qt, confidence, z.squeeze()
 
@@ -222,14 +228,15 @@ class GraspSamplerGAN(GraspSampler):
                  model_scale,
                  pointnet_radius,
                  pointnet_nclusters,
-                 latent_size=2):
-        super(GraspSamplerGAN, self).__init__()
+                 latent_size=2,
+                 device="cpu"):
+        super(GraspSamplerGAN, self).__init__(device)
         self.create_decoder(model_scale, pointnet_radius, pointnet_nclusters,
                             latent_size + 3)
         self.latent_size = latent_size
 
     def sample_latent(self, batch_size):
-        return torch.rand(batch_size, self.latent_size).cuda()
+        return torch.rand(batch_size, self.latent_size).to(self.device)
 
     def forward(self, pc, grasps=None, train=True):
         z = self.sample_latent(pc.shape[0])
@@ -246,9 +253,11 @@ class GraspEvaluator(nn.Module):
     def __init__(self,
                  model_scale=1,
                  pointnet_radius=0.02,
-                 pointnet_nclusters=128):
+                 pointnet_nclusters=128,
+                 device="cpu"):
         super(GraspEvaluator, self).__init__()
         self.create_evaluator(pointnet_radius, model_scale, pointnet_nclusters)
+        self.device = device
 
     def create_evaluator(self, pointnet_radius, model_scale,
                          pointnet_nclusters):
@@ -295,7 +304,8 @@ class GraspEvaluator(nn.Module):
         labels.unsqueeze_(0)
         labels = labels.repeat(batch_size, 1, 1)
 
-        l0_points = torch.cat([l0_xyz, labels.cuda()], -1).transpose(-1, 1)
+        l0_points = torch.cat([l0_xyz, labels.to(self.device)],
+                              -1).transpose(-1, 1)
         return l0_xyz, l0_points
 
 

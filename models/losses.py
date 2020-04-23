@@ -3,8 +3,10 @@ import numpy as np
 
 
 def control_point_l1_loss_better_than_threshold(pred_control_points,
-                                                gt_control_points, confidence,
-                                                confidence_threshold):
+                                                gt_control_points,
+                                                confidence,
+                                                confidence_threshold,
+                                                device="cpu"):
     npoints = pred_control_points.shape[1]
     mask = torch.greater_equal(confidence, confidence_threshold)
     mask_ratio = torch.mean(mask)
@@ -15,8 +17,11 @@ def control_point_l1_loss_better_than_threshold(pred_control_points,
     return control_point_l1_loss(p1, p2), mask_ratio
 
 
-def accuracy_better_than_threshold(pred_success_logits, gt, confidence,
-                                   confidence_threshold):
+def accuracy_better_than_threshold(pred_success_logits,
+                                   gt,
+                                   confidence,
+                                   confidence_threshold,
+                                   device="cpu"):
     """
       Computes average precision for the grasps with confidence > threshold.
     """
@@ -36,7 +41,8 @@ def accuracy_better_than_threshold(pred_success_logits, gt, confidence,
 def control_point_l1_loss(pred_control_points,
                           gt_control_points,
                           confidence=None,
-                          confidence_weight=None):
+                          confidence_weight=None,
+                          device="cpu"):
     """
       Computes the l1 loss between the predicted control points and the
       groundtruth control points on the gripper.
@@ -51,7 +57,7 @@ def control_point_l1_loss(pred_control_points,
         confidence_term = torch.mean(
             torch.log(torch.max(
                 confidence,
-                torch.tensor(1e-10).cuda()))) * confidence_weight
+                torch.tensor(1e-10).to(device)))) * confidence_weight
         #print('confidence_term = ', confidence_term.shape)
 
     #print('l1_error = {}'.format(error.shape))
@@ -61,8 +67,11 @@ def control_point_l1_loss(pred_control_points,
         return torch.mean(error), -confidence_term
 
 
-def classification_with_confidence_loss(pred_logit, gt, confidence,
-                                        confidence_weight):
+def classification_with_confidence_loss(pred_logit,
+                                        gt,
+                                        confidence,
+                                        confidence_weight,
+                                        device="cpu"):
     """
       Computes the cross entropy loss and confidence term that penalizes
       outputing zero confidence. Returns cross entropy loss and the confidence
@@ -71,19 +80,19 @@ def classification_with_confidence_loss(pred_logit, gt, confidence,
     classification_loss = torch.nn.functional.binary_cross_entropy_with_logits(
         pred_logit, gt)
     confidence_term = torch.mean(
-        torch.log(torch.max(confidence,
-                            torch.tensor(1e-10).cuda()))) * confidence_weight
+        torch.log(torch.max(
+            confidence,
+            torch.tensor(1e-10).to(device)))) * confidence_weight
 
     return classification_loss, -confidence_term
 
 
-def min_distance_loss(
-        pred_control_points,
-        gt_control_points,
-        confidence=None,
-        confidence_weight=None,
-        threshold=None,
-):
+def min_distance_loss(pred_control_points,
+                      gt_control_points,
+                      confidence=None,
+                      confidence_weight=None,
+                      threshold=None,
+                      device="cpu"):
     """
     Computes the minimum distance (L1 distance)between each gt control point 
     and any of the predicted control points.
@@ -133,15 +142,18 @@ def min_distance_loss(
         confidence_term = torch.mean(
             torch.log(torch.max(
                 confidence,
-                torch.tensor(1e-4).cuda()))) * confidence_weight
+                torch.tensor(1e-4).to(device)))) * confidence_weight
     else:
         confidence_term = 0.
 
     return torch.mean(min_distance_error), -confidence_term
 
 
-def min_distance_better_than_threshold(pred_control_points, gt_control_points,
-                                       confidence, confidence_threshold):
+def min_distance_better_than_threshold(pred_control_points,
+                                       gt_control_points,
+                                       confidence,
+                                       confidence_threshold,
+                                       device="cpu"):
     error = torch.expand_dims(pred_control_points, 1) - torch.expand_dims(
         gt_control_points, 0)
     error = torch.sum(torch.abs(error),
@@ -155,7 +167,7 @@ def min_distance_better_than_threshold(pred_control_points, gt_control_points,
     return torch.mean(error[mask]), torch.mean(mask)
 
 
-def kl_divergence(mu, log_sigma):
+def kl_divergence(mu, log_sigma, device="cpu"):
     """
       Computes the kl divergence for batch of mu and log_sigma.
     """
@@ -163,7 +175,8 @@ def kl_divergence(mu, log_sigma):
         -.5 * torch.sum(1. + log_sigma - mu**2 - torch.exp(log_sigma), dim=-1))
 
 
-def confidence_loss(confidence, confidence_weight):
+def confidence_loss(confidence, confidence_weight, device="cpu"):
     return torch.mean(
-        torch.log(torch.max(confidence,
-                            torch.tensor(1e-10).cuda()))) * confidence_weight
+        torch.log(torch.max(
+            confidence,
+            torch.tensor(1e-10).to(device)))) * confidence_weight

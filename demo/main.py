@@ -17,6 +17,7 @@ import mayavi.mlab as mlab
 from utils.visualization_utils import *
 import mayavi.mlab as mlab
 from utils import utils
+from data import DataLoader
 
 
 def make_parser():
@@ -44,7 +45,13 @@ def make_parser():
     parser.add_argument('--target_pc_size', type=int, default=1024)
     parser.add_argument('--num_grasp_samples', type=int, default=10)
     parser.add_argument('--gpu', action='store_true')
-
+    parser.add_argument('--train_data', action='store_true')
+    opts, _ = parser.parse_known_args()
+    if opts.train_data:
+        parser.add_argument('--dataset_root_folder',
+                            required=True,
+                            type=str,
+                            help='path to root directory of the dataset.')
     return parser
 
 
@@ -108,44 +115,62 @@ def main(args):
     grasp_evaluator_args.continue_train = True
     estimator = grasp_estimator.GraspEstimator(grasp_sampler_args,
                                                grasp_evaluator_args, args)
-    for npy_file in glob.glob(os.path.join(args.npy_folder, '*.npy')):
-        # Depending on your numpy version you may need to change allow_pickle
-        # from True to False.
+    if args.train_data:
+        grasp_sampler_args.dataset_root_folder = args.dataset_root_folder
+        grasp_sampler_args.num_grasps_per_object = 1
+        grasp_sampler_args.num_objects_per_batch = 1
+        dataset = DataLoader(grasp_sampler_args)
+        for i, data in enumerate(dataset):
+            generated_grasps, generated_scores = estimator.generate_and_refine_grasps(
+                data["pc"].squeeze())
+            mlab.figure(bgcolor=(1, 1, 1))
+            draw_scene(
+                data["pc"].squeeze(),
+                grasps=generated_grasps,
+                grasp_scores=generated_scores,
+            )
+            print('close the window to continue to next object . . .')
+            mlab.show()
+    else:
+        for npy_file in glob.glob(os.path.join(args.npy_folder, '*.npy')):
+            # Depending on your numpy version you may need to change allow_pickle
+            # from True to False.
 
-        data = np.load(npy_file, allow_pickle=True, encoding="latin1").item()
+            data = np.load(npy_file, allow_pickle=True,
+                           encoding="latin1").item()
 
-        depth = data['depth']
-        image = data['image']
-        K = data['intrinsics_matrix']
-        # Removing points that are farther than 1 meter or missing depth
-        # values.
-        #depth[depth == 0 or depth > 1] = np.nan
+            depth = data['depth']
+            image = data['image']
+            K = data['intrinsics_matrix']
+            # Removing points that are farther than 1 meter or missing depth
+            # values.
+            #depth[depth == 0 or depth > 1] = np.nan
 
-        np.nan_to_num(depth, copy=False)
-        mask = np.where(np.logical_or(depth == 0, depth > 1))
-        depth[mask] = np.nan
-        pc, selection = backproject(depth,
-                                    K,
-                                    return_finite_depth=True,
-                                    return_selection=True)
-        pc_colors = image.copy()
-        pc_colors = np.reshape(pc_colors, [-1, 3])
-        pc_colors = pc_colors[selection, :]
+            np.nan_to_num(depth, copy=False)
+            mask = np.where(np.logical_or(depth == 0, depth > 1))
+            depth[mask] = np.nan
+            pc, selection = backproject(depth,
+                                        K,
+                                        return_finite_depth=True,
+                                        return_selection=True)
+            pc_colors = image.copy()
+            pc_colors = np.reshape(pc_colors, [-1, 3])
+            pc_colors = pc_colors[selection, :]
 
-        # Smoothed pc comes from averaging the depth for 10 frames and removing
-        # the pixels with jittery depth between those 10 frames.
-        object_pc = data['smoothed_object_pc']
-        generated_grasps, generated_scores = estimator.generate_and_refine_grasps(
-            object_pc, )
-        mlab.figure(bgcolor=(1, 1, 1))
-        draw_scene(
-            pc,
-            pc_color=pc_colors,
-            grasps=generated_grasps,
-            grasp_scores=generated_scores,
-        )
-        print('close the window to continue to next object . . .')
-        mlab.show()
+            # Smoothed pc comes from averaging the depth for 10 frames and removing
+            # the pixels with jittery depth between those 10 frames.
+            object_pc = data['smoothed_object_pc']
+            generated_grasps, generated_scores = estimator.generate_and_refine_grasps(
+                object_pc)
+            mlab.figure(bgcolor=(1, 1, 1))
+            draw_scene(
+                pc,
+                pc_color=pc_colors,
+                grasps=generated_grasps,
+                grasp_scores=generated_scores,
+            )
+            print('close the window to continue to next object . . .')
+            mlab.show()
 
 
 if __name__ == '__main__':

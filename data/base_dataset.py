@@ -295,7 +295,7 @@ class BaseDataset(data.Dataset):
             self.std = transform_dict['std']
             self.ninput_channels = transform_dict['ninput_channels']
 
-    def make_dataset(self, ):
+    def make_dataset(self):
         split_files = os.listdir(
             os.path.join(self.opt.dataset_root_folder,
                          self.opt.splits_folder_name))
@@ -303,7 +303,6 @@ class BaseDataset(data.Dataset):
         for split_file in split_files:
             if split_file.find('.json') < 0:
                 continue
-
             should_go_through = False
             if self.opt.allowed_categories == '':
                 should_go_through = True

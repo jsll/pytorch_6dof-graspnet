@@ -279,7 +279,7 @@ def get_gripper_pc(batch_size, npoints, use_torch=True):
     return output
 
 
-def get_control_point_tensor(batch_size, use_torch=True):
+def get_control_point_tensor(batch_size, use_torch=True, device="cpu"):
     """
       Outputs a tensor of shape (batch_size x 6 x 3).
       use_tf: switches between outputing a tensor and outputing a numpy array.
@@ -293,16 +293,12 @@ def get_control_point_tensor(batch_size, use_torch=True):
                              [batch_size, 1, 1])
 
     if use_torch:
-        return torch.tensor(control_points)
+        return torch.tensor(control_points).to(device)
 
     return control_points
 
 
-def transform_control_points(
-        gt_grasps,
-        batch_size,
-        mode='qt',
-):
+def transform_control_points(gt_grasps, batch_size, mode='qt', device="cpu"):
     """
       Transforms canonical points using gt_grasps.
       mode = 'qt' expects gt_grasps to have (batch_size x 7) where each 
@@ -316,31 +312,30 @@ def transform_control_points(
     if mode == 'qt':
         assert (len(grasp_shape) == 2), grasp_shape
         assert (grasp_shape[-1] == 7), grasp_shape
-        control_points = get_control_point_tensor(batch_size).cuda()
+        control_points = get_control_point_tensor(batch_size, device=device)
         num_control_points = control_points.shape[1]
         input_gt_grasps = gt_grasps
         gt_grasps = torch.unsqueeze(input_gt_grasps,
                                     1).repeat(1, num_control_points, 1)
         gt_q = gt_grasps[:, :, :4]
         gt_t = gt_grasps[:, :, 4:]
-        gt_control_points = rotate_point_by_quaternion(control_points, gt_q)
+        gt_control_points = rotate_point_by_quaternion(control_points,
+                                                       gt_q,
+                                                       device=device)
         gt_control_points += gt_t
 
         return gt_control_points
     else:
         assert (len(grasp_shape) == 3), grasp_shape
         assert (grasp_shape[1] == 4 and grasp_shape[2] == 4), grasp_shape
-        control_points = get_control_point_tensor(batch_size)
+        control_points = get_control_point_tensor(batch_size, device=device)
         shape = control_points.shape
         ones = torch.ones((shape[0], shape[1], 1), dtype=torch.float32)
         control_points = torch.cat((control_points, ones), -1)
         return torch.matmul(control_points, gt_grasps.permute(0, 2, 1))
 
 
-def transform_control_points_numpy(gt_grasps,
-                                   batch_size,
-                                   mode='qt',
-                                   scope='transform_gt_control_points'):
+def transform_control_points_numpy(gt_grasps, batch_size, mode='qt'):
     """
       Transforms canonical points using gt_grasps.
       mode = 'qt' expects gt_grasps to have (batch_size x 7) where each 
@@ -406,7 +401,7 @@ def conj_quaternion(q):
     return q_conj
 
 
-def rotate_point_by_quaternion(point, q):
+def rotate_point_by_quaternion(point, q, device="cpu"):
     """
       Takes in points with shape of (batch_size x n x 3) and quaternions with
       shape of (batch_size x n x 4) and returns a tensor with shape of 
@@ -429,7 +424,8 @@ def rotate_point_by_quaternion(point, q):
 
     q_conj = conj_quaternion(q)
     r = torch.cat([
-        torch.zeros((shape[0], shape[1], 1), dtype=point.dtype).cuda(), point
+        torch.zeros(
+            (shape[0], shape[1], 1), dtype=point.dtype).to(device), point
     ],
                   dim=-1)
     final_point = quaternion_mult(quaternion_mult(q, r), q_conj)
@@ -490,7 +486,7 @@ def control_points_from_rot_and_trans(grasp_eulers,
                              grasp_eulers[:, 1],
                              grasp_eulers[:, 2],
                              batched=True)
-    grasp_pc = get_control_point_tensor(grasp_eulers.shape[0]).to(device)
+    grasp_pc = get_control_point_tensor(grasp_eulers.shape[0], device=device)
     grasp_pc = torch.matmul(grasp_pc, rot.permute(0, 2, 1))
     grasp_pc += grasp_translations.unsqueeze(1).expand(-1, grasp_pc.shape[1],
                                                        -1)

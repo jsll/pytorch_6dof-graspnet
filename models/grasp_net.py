@@ -15,6 +15,8 @@ class GraspNetModel:
         self.opt = opt
         self.gpu_ids = opt.gpu_ids
         self.is_train = opt.is_train
+        if self.gpu_ids and self.gpu_ids[0] >= torch.cuda.device_count():
+            self.gpu_ids[0] = torch.cuda.device_count() - 1
         self.device = torch.device('cuda:{}'.format(
             self.gpu_ids[0])) if self.gpu_ids else torch.device('cpu')
         self.save_dir = join(opt.checkpoints_dir, opt.name)
@@ -24,7 +26,8 @@ class GraspNetModel:
         self.grasps = None
         # load/define networks
         self.net = networks.define_classifier(opt, self.gpu_ids, opt.arch,
-                                              opt.init_type, opt.init_gain)
+                                              opt.init_type, opt.init_gain,
+                                              self.device)
 
         self.criterion = networks.define_loss(opt)
 
@@ -43,7 +46,7 @@ class GraspNetModel:
                                               betas=(opt.beta1, 0.999))
             self.scheduler = networks.get_scheduler(self.optimizer, opt)
         if not self.is_train or opt.continue_train:
-            self.load_network(opt.which_epoch)
+            self.load_network(opt.which_epoch, self.is_train)
 
     def set_input(self, data):
         input_pcs = torch.from_numpy(data['pc']).contiguous()
@@ -72,30 +75,35 @@ class GraspNetModel:
         if self.opt.arch == 'vae':
             predicted_cp, confidence, mu, logvar = out
             predicted_cp = utils.transform_control_points(
-                predicted_cp, predicted_cp.shape[0])
+                predicted_cp, predicted_cp.shape[0], device=self.device)
             self.reconstruction_loss, self.confidence_loss = self.criterion[1](
                 predicted_cp,
                 self.targets,
                 confidence=confidence,
-                confidence_weight=self.opt.confidence_weight)
-            self.kl_loss = self.opt.kl_loss_weight * self.criterion[0](mu,
-                                                                       logvar)
+                confidence_weight=self.opt.confidence_weight,
+                device=self.device)
+            self.kl_loss = self.opt.kl_loss_weight * self.criterion[0](
+                mu, logvar, device=self.device)
             self.loss = self.kl_loss + self.reconstruction_loss + self.confidence_loss
         elif self.opt.arch == 'gan':
             predicted_cp, confidence = out
             predicted_cp = utils.transform_control_points(
-                predicted_cp, predicted_cp.shape[0])
+                predicted_cp, predicted_cp.shape[0], device=self.device)
             self.reconstruction_loss, self.confidence_loss = self.criterion(
                 predicted_cp,
                 self.targets,
                 confidence=confidence,
-                confidence_weight=self.opt.confidence_weight)
+                confidence_weight=self.opt.confidence_weight,
+                device=self.device)
             self.loss = self.reconstruction_loss + self.confidence_loss
         elif self.opt.arch == 'evaluator':
             grasp_classification, confidence = out
             self.classification_loss, self.confidence_loss = self.criterion(
-                grasp_classification.squeeze(), self.targets, confidence,
-                self.opt.confidence_weight)
+                grasp_classification.squeeze(),
+                self.targets,
+                confidence,
+                self.opt.confidence_weight,
+                device=self.device)
             self.loss = self.classification_loss + self.confidence_loss
 
         self.loss.backward()
@@ -109,7 +117,7 @@ class GraspNetModel:
 
 ##################
 
-    def load_network(self, which_epoch):
+    def load_network(self, which_epoch, train=True):
         """load model from disk"""
         save_filename = '%s_net.pth' % which_epoch
         load_path = join(self.save_dir, save_filename)
@@ -121,6 +129,8 @@ class GraspNetModel:
         if hasattr(state_dict, '_metadata'):
             del state_dict._metadata
         net.load_state_dict(state_dict)
+        if not train:
+            net.eval()
 
     def save_network(self, which_epoch):
         """save model to disk"""
@@ -155,7 +165,7 @@ class GraspNetModel:
                 return reconstruction_loss, 1
             elif self.opt.arch == "gan":
                 predicted_cp = utils.transform_control_points(
-                    prediction, prediction.shape[0])
+                    prediction, prediction.shape[0], device=self.device)
                 reconstruction_loss, _ = self.criterion(
                     predicted_cp,
                     self.targets,
