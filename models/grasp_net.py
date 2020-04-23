@@ -161,7 +161,8 @@ class GraspNetModel:
                     prediction,
                     self.targets,
                     confidence=confidence,
-                    confidence_weight=self.opt.confidence_weight)
+                    confidence_weight=self.opt.confidence_weight,
+                    device=self.device)
                 return reconstruction_loss, 1
             elif self.opt.arch == "gan":
                 predicted_cp = utils.transform_control_points(
@@ -170,7 +171,8 @@ class GraspNetModel:
                     predicted_cp,
                     self.targets,
                     confidence=confidence,
-                    confidence_weight=self.opt.confidence_weight)
+                    confidence_weight=self.opt.confidence_weight,
+                    device=self.device)
                 return reconstruction_loss, 1
             else:
                 _, predicted = torch.max(prediction, 1)
