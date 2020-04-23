@@ -1,10 +1,3 @@
-# Copyright (c) 2019, NVIDIA CORPORATION.  All rights reserved.
-#
-# NVIDIA CORPORATION and its licensors retain all intellectual property
-# and proprietary rights in and to this software, related documentation
-# and any modifications thereto.  Any use, reproduction, disclosure or
-# distribution of this software and related documentation without an express
-# license agreement from NVIDIA CORPORATION is strictly prohibited.
 # -*- coding: utf-8 -*-
 """Helper classes and functions to sample grasps for a given object mesh."""
 
@@ -309,7 +302,8 @@ def grasp_quality_antipodal(transforms, collisions, object_mesh, gripper_name='p
                     left_contact_point = locations[index_ray_left[left_contact_idx]]
                     right_contact_point = locations[index_ray_right[right_contact_idx]]
 
-                    left_contact_normal = object_mesh.face_normals[index_tri[index_ray_left[left_contact_idx]]]
+                    left_contact_normal = object_mesh.face_normals[
+                        index_tri[index_ray_left[left_contact_idx]]]
                     right_contact_normal = object_mesh.face_normals[
                         index_tri[index_ray_right[right_contact_idx]]]
 

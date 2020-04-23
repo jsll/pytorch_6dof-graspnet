@@ -1,10 +1,3 @@
-# Copyright (c) 2019, NVIDIA CORPORATION.  All rights reserved.
-#
-# NVIDIA CORPORATION and its licensors retain all intellectual property
-# and proprietary rights in and to this software, related documentation
-# and any modifications thereto.  Any use, reproduction, disclosure or
-# distribution of this software and related documentation without an express
-# license agreement from NVIDIA CORPORATION is strictly prohibited.
 from __future__ import print_function
 
 import mayavi.mlab as mlab
@@ -42,7 +35,8 @@ def draw_scene(pc,
                visualize_diverse_grasps=False,
                min_seperation_distance=0.03,
                pc_color=None,
-               plasma_coloring=False):
+               plasma_coloring=False,
+               target_cps=None):
     """
     Draws the 3D scene for the object and the scene.
     Args:
@@ -68,7 +62,7 @@ def draw_scene(pc,
         pc.
     """
 
-    max_grasps = 200
+    max_grasps = 10
     grasps = np.array(grasps)
 
     if grasp_scores is not None:
@@ -123,7 +117,6 @@ def draw_scene(pc,
             g.glyph.glyph.scale_factor = 0.01
 
     grasp_pc = np.squeeze(utils.get_control_point_tensor(1, False), 0)
-    print(grasp_pc.shape)
     grasp_pc[2, 2] = 0.059
     grasp_pc[3, 2] = 0.059
 
@@ -229,6 +222,12 @@ def draw_scene(pc,
                             color=gripper_color,
                             tube_radius=tube_radius,
                             opacity=1)
+                if target_cps is not None:
+                    mlab.points3d(target_cps[ii, :, 0],
+                                  target_cps[ii, :, 1],
+                                  target_cps[ii, :, 2],
+                                  color=(1.0, 0.0, 0),
+                                  scale_factor=0.01)
 
     print('removed {} similar grasps'.format(removed))
 

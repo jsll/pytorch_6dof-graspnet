@@ -1,10 +1,3 @@
-# Copyright (c) 2019, NVIDIA CORPORATION.  All rights reserved.
-#
-# NVIDIA CORPORATION and its licensors retain all intellectual property
-# and proprietary rights in and to this software, related documentation
-# and any modifications thereto.  Any use, reproduction, disclosure or
-# distribution of this software and related documentation without an express
-# license agreement from NVIDIA CORPORATION is strictly prohibited.
 from __future__ import print_function
 from __future__ import absolute_import
 
@@ -160,9 +153,9 @@ class ObjectRenderer:
             cv2.imshow('w', color)
             cv2.waitKey(1)
 
-            #mlab.figure()
+            # mlab.figure()
             #mlab.points3d(pc[:, 0], pc[:, 1], pc[:, 2])
-            #mlab.show()
+            # mlab.show()
             key = '{}_{}_{}'.format(euler[0], euler[1], euler[2])
             pcs.append(pc)
             rotations.append(final_rotation[0])

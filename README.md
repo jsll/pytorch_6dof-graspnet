@@ -2,7 +2,7 @@
 
 This is a PyTorch implementation of [6-DoF
 GraspNet](https://arxiv.org/abs/1905.10520). The original Tensorflow
-implementation is found here <https://github.com/NVlabs/6dof-graspnet>.
+implementation can be found here <https://github.com/NVlabs/6dof-graspnet>.
 
 # License
 
@@ -10,11 +10,13 @@ The source code is released under [MIT License](LICENSE) and the trained weights
 
 ## Installation
 
-This code has been tested with python 3.6, PyTorch 1.4 and CUDA 10.0 on Ubuntu 18.04.
+This code has been tested with python 3.6, PyTorch 1.4 and CUDA 10.0 on Ubuntu
+18.04. To install do
 
-1) pip3 install torch==1.4.0+cu100 torchvision==0.5.0+cu100 -f https://download.pytorch.org/whl/torch_stable.html
+1) pip3 install torch==1.4.0+cu100 torchvision==0.5.0+cu100 -f <https://download.pytorch.org/whl/torch_stable.html>
 
-2) Clone this repository: `git lfs clone git@github.com:jsll/pytorch_6dof-graspnet.git`. Note the `lfs` in the command to make sure that the pre-trained models are cloned properly.
+2) Clone this repository: `git clone
+   git@github.com:jsll/pytorch_6dof-graspnet.git`.
 
 3) Clone pointnet++: `git@github.com:erikwijmans/Pointnet2_PyTorch.git`.
 
@@ -24,24 +26,29 @@ This code has been tested with python 3.6, PyTorch 1.4 and CUDA 10.0 on Ubuntu 1
 
 6) Run `pip3 install -r requirements.txt` to install necessary python libraries.
 
-7) (optional) For multi-gpu training only: Install horovod and MPI from [here](https://github.com/horovod/horovod). We used single-gpu training for training VAE and 8-gpu training for the evaluator network.
+7) (Optional) Download the trained models either by running `sh
+   checkpoints/download_models.sh` or manually from [here](https://drive.google.com/drive/folders/1iQsyaDNIR8mEyndFRXbYDtYwkROHDhZv?usp=sharing). Trained
+   models are released under [CC-BY-NC-SA 2.0](TRAINED_MODEL_LICENSE).
 
-8) Download the checkpoints to the `checkpoints` folder. Trained checkpoints are released under [CC-BY-NC-SA 2.0](TRAINED_MODEL_LICENSE) and can be downloaded from [here](https://drive.google.com/drive/folders/1mVX2kqXg9BZ22y3HEyqta20tiQrL8OK_?usp=sharing).
+## Updates
+
+In the paper, the authors only used gradient-based refinement. Recently, they released a Metropolis-Hastings
+sampling which they found to give better results in shorter time. As a result, I keep the Metropolis-Hastings sampling as the default for the demo.
+
+This repository also includes an improved grasp sampling network which was
+proposed here <https://github.com/NVlabs/6dof-graspnet>. The new grasp sampling
+network is trained with [Implicit Maximum Likelihood Estimation](https://arxiv.org/pdf/2004.03590.pdf).
 
 ## Demo
 
-Run the demo using the command below. In the paper, we only used gradient-based refinement. We also experimented with Metropolis-Hastings sampling and found it giving better results in shorter time.
-As a result, we keep Metropolis-Hastings sampling as the default for the demo.
-
-We added a gan formulation which improves the sampling quality. See details in
-the [paper](https://arxiv.org/abs/1905.10520).Command for running the demo:
+Run the demo using the command below
 
 ```shell
-python -m demo.main # metropolis hasting sampling refinement. Optimal default setting for comparison with other methods.
+python -m demo.main
 ```
 
 Per default, the demo script runs the GAN sampler with sampling based
-refinement. To run it with the VAE sampler and gradient refinement run:
+refinement. To use the VAE sampler and/or gradient refinement run:
 
 ```shell
 python -m demo.main --grasp_sampler_folder checkpoints/vae_pretrained/ --refinement_method gradient
@@ -96,7 +103,8 @@ would appreciate it if someone could convert it and send in a pull request.
 
 ## Citation
 
-If you find our work useful in your research, please consider citing:
+If you find this work useful in your research, please consider citing the
+original authors work:
 
 ```
 inproceedings{mousavian2019graspnet,
