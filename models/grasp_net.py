@@ -26,7 +26,8 @@ class GraspNetModel:
         self.grasps = None
         # load/define networks
         self.net = networks.define_classifier(opt, self.gpu_ids, opt.arch,
-                                              opt.init_type, opt.init_gain)
+                                              opt.init_type, opt.init_gain,
+                                              self.device)
 
         self.criterion = networks.define_loss(opt)
 
@@ -74,30 +75,35 @@ class GraspNetModel:
         if self.opt.arch == 'vae':
             predicted_cp, confidence, mu, logvar = out
             predicted_cp = utils.transform_control_points(
-                predicted_cp, predicted_cp.shape[0])
+                predicted_cp, predicted_cp.shape[0], device=self.device)
             self.reconstruction_loss, self.confidence_loss = self.criterion[1](
                 predicted_cp,
                 self.targets,
                 confidence=confidence,
-                confidence_weight=self.opt.confidence_weight)
-            self.kl_loss = self.opt.kl_loss_weight * self.criterion[0](mu,
-                                                                       logvar)
+                confidence_weight=self.opt.confidence_weight,
+                device=self.device)
+            self.kl_loss = self.opt.kl_loss_weight * self.criterion[0](
+                mu, logvar, device=self.device)
             self.loss = self.kl_loss + self.reconstruction_loss + self.confidence_loss
         elif self.opt.arch == 'gan':
             predicted_cp, confidence = out
             predicted_cp = utils.transform_control_points(
-                predicted_cp, predicted_cp.shape[0])
+                predicted_cp, predicted_cp.shape[0], device=self.device)
             self.reconstruction_loss, self.confidence_loss = self.criterion(
                 predicted_cp,
                 self.targets,
                 confidence=confidence,
-                confidence_weight=self.opt.confidence_weight)
+                confidence_weight=self.opt.confidence_weight,
+                device=self.device)
             self.loss = self.reconstruction_loss + self.confidence_loss
         elif self.opt.arch == 'evaluator':
             grasp_classification, confidence = out
             self.classification_loss, self.confidence_loss = self.criterion(
-                grasp_classification.squeeze(), self.targets, confidence,
-                self.opt.confidence_weight)
+                grasp_classification.squeeze(),
+                self.targets,
+                confidence,
+                self.opt.confidence_weight,
+                device=self.device)
             self.loss = self.classification_loss + self.confidence_loss
 
         self.loss.backward()
@@ -159,7 +165,7 @@ class GraspNetModel:
                 return reconstruction_loss, 1
             elif self.opt.arch == "gan":
                 predicted_cp = utils.transform_control_points(
-                    prediction, prediction.shape[0])
+                    prediction, prediction.shape[0], device=self.device)
                 reconstruction_loss, _ = self.criterion(
                     predicted_cp,
                     self.targets,
