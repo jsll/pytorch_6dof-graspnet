@@ -205,7 +205,7 @@ class GraspSamplerVAE(GraspSampler):
 
     def generate_grasps(self, pc, z=None):
         if z is None:
-            z = torch.randn((pc.shape[0], self.latent_size))
+            z = torch.randn((pc.shape[0], self.latent_size)).cuda()
         qt, confidence = self.decode(pc, z)
         return qt, confidence, z.squeeze()
 

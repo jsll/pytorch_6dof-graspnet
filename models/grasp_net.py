@@ -15,6 +15,8 @@ class GraspNetModel:
         self.opt = opt
         self.gpu_ids = opt.gpu_ids
         self.is_train = opt.is_train
+        if self.gpu_ids and self.gpu_ids[0] >= torch.cuda.device_count():
+            self.gpu_ids[0] = torch.cuda.device_count() - 1
         self.device = torch.device('cuda:{}'.format(
             self.gpu_ids[0])) if self.gpu_ids else torch.device('cpu')
         self.save_dir = join(opt.checkpoints_dir, opt.name)
@@ -43,7 +45,7 @@ class GraspNetModel:
                                               betas=(opt.beta1, 0.999))
             self.scheduler = networks.get_scheduler(self.optimizer, opt)
         if not self.is_train or opt.continue_train:
-            self.load_network(opt.which_epoch)
+            self.load_network(opt.which_epoch, self.is_train)
 
     def set_input(self, data):
         input_pcs = torch.from_numpy(data['pc']).contiguous()
@@ -109,7 +111,7 @@ class GraspNetModel:
 
 ##################
 
-    def load_network(self, which_epoch):
+    def load_network(self, which_epoch, train=True):
         """load model from disk"""
         save_filename = '%s_net.pth' % which_epoch
         load_path = join(self.save_dir, save_filename)
@@ -121,6 +123,8 @@ class GraspNetModel:
         if hasattr(state_dict, '_metadata'):
             del state_dict._metadata
         net.load_state_dict(state_dict)
+        if not train:
+            net.eval()
 
     def save_network(self, which_epoch):
         """save model to disk"""
