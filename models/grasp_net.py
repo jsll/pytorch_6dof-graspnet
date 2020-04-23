@@ -155,7 +155,6 @@ class GraspNetModel:
         with torch.no_grad():
             out = self.forward()
             prediction, confidence = out
-            # compute number of correct
             if self.opt.arch == "vae":
                 predicted_cp = utils.transform_control_points(
                     prediction, prediction.shape[0], device=self.device)

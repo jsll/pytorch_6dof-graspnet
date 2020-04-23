@@ -315,13 +315,13 @@ def transform_control_points(gt_grasps, batch_size, mode='qt', device="cpu"):
         control_points = get_control_point_tensor(batch_size, device=device)
         num_control_points = control_points.shape[1]
         input_gt_grasps = gt_grasps
+
         gt_grasps = torch.unsqueeze(input_gt_grasps,
                                     1).repeat(1, num_control_points, 1)
+
         gt_q = gt_grasps[:, :, :4]
         gt_t = gt_grasps[:, :, 4:]
-        gt_control_points = rotate_point_by_quaternion(control_points,
-                                                       gt_q,
-                                                       device=device)
+        gt_control_points = qrot(gt_q, control_points)
         gt_control_points += gt_t
 
         return gt_control_points
@@ -505,7 +505,7 @@ def rot_and_trans_to_grasps(euler_angles, translations, selection_mask):
 
 def convert_qt_to_rt(grasps):
     Ts = grasps[:, 4:]
-    Rs = qeuler(grasps[:, :4], "xyz")
+    Rs = qeuler(grasps[:, :4], "zyx")
     return Rs, Ts
 
 
@@ -625,3 +625,24 @@ def quat2mat(quat):
     ],
                          dim=1).reshape(B, 3, 3)
     return rotMat
+
+
+def qrot(q, v):
+    """
+    Rotate vector(s) v about the rotation described by quaternion(s) q.
+    Expects a tensor of shape (*, 4) for q and a tensor of shape (*, 3) for v,
+    where * denotes any number of dimensions.
+    Returns a tensor of shape (*, 3).
+    """
+    assert q.shape[-1] == 4
+    assert v.shape[-1] == 3
+    assert q.shape[:-1] == v.shape[:-1]
+
+    original_shape = list(v.shape)
+    q = q.view(-1, 4)
+    v = v.view(-1, 3)
+
+    qvec = q[:, 1:]
+    uv = torch.cross(qvec, v, dim=1)
+    uuv = torch.cross(qvec, uv, dim=1)
+    return (v + 2 * (q[:, :1] * uv + uuv)).view(original_shape)
