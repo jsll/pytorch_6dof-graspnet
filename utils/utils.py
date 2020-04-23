@@ -334,7 +334,7 @@ def transform_control_points(
         shape = control_points.shape
         ones = torch.ones((shape[0], shape[1], 1), dtype=torch.float32)
         control_points = torch.cat((control_points, ones), -1)
-        return torch.matmul(control_points, gt_grasps.permute(2, 0, 1))
+        return torch.matmul(control_points, gt_grasps.permute(0, 2, 1))
 
 
 def transform_control_points_numpy(gt_grasps,
@@ -373,7 +373,7 @@ def transform_control_points_numpy(gt_grasps,
         shape = control_points.shape
         ones = np.ones((shape[0], shape[1], 1), dtype=np.float32)
         control_points = np.concatenate((control_points, ones), -1)
-        return np.einsum("ijk,kki->ijk", control_points, gt_grasps.T)
+        return np.matmul(control_points, np.transpose(gt_grasps, (0, 2, 1)))
 
 
 def quaternion_mult(q, r):
@@ -491,7 +491,7 @@ def control_points_from_rot_and_trans(grasp_eulers,
                              grasp_eulers[:, 2],
                              batched=True)
     grasp_pc = get_control_point_tensor(grasp_eulers.shape[0]).to(device)
-    grasp_pc = torch.einsum('ijk,ikk->ijk', grasp_pc, rot)
+    grasp_pc = torch.matmul(grasp_pc, rot.permute(0, 2, 1))
     grasp_pc += grasp_translations.unsqueeze(1).expand(-1, grasp_pc.shape[1],
                                                        -1)
     return grasp_pc
@@ -591,8 +591,6 @@ def choose_grasps_better_than_threshold_in_sequence(eulers,
     output = np.zeros(probs.shape, dtype=np.float32)
     max_index = np.argmax(probs, 0)
     max_value = np.max(probs, 0)
-    # print(max_value)
-    # print(max_index)
     for i in range(probs.shape[1]):
         if max_value[i] > threshold:
             output[max_index[i]][i] = 1.
@@ -603,3 +601,31 @@ def denormalize_grasps(grasps, mean=0, std=1):
     temp = 1 / std
     for grasp in grasps:
         grasp[:3, 3] = (std * grasp[:3, 3] + mean)
+
+
+def quat2mat(quat):
+    """Convert quaternion coefficients to rotation matrix.
+    Args:
+        quat: first three coeff of quaternion of rotation. fourth is then computed to have a norm of 1 -- size = [B, 3]
+    Returns:
+        Rotation matrix corresponding to the quaternion -- size = [B, 3, 3]
+    """
+    norm_quat = torch.cat([quat[:, :1].detach() * 0 + 1, quat], dim=1)
+    norm_quat = norm_quat / norm_quat.norm(p=2, dim=1, keepdim=True)
+    w, x, y, z = norm_quat[:, 0], norm_quat[:, 1], norm_quat[:,
+                                                             2], norm_quat[:,
+                                                                           3]
+
+    B = quat.size(0)
+
+    w2, x2, y2, z2 = w.pow(2), x.pow(2), y.pow(2), z.pow(2)
+    wx, wy, wz = w * x, w * y, w * z
+    xy, xz, yz = x * y, x * z, y * z
+
+    rotMat = torch.stack([
+        w2 + x2 - y2 - z2, 2 * xy - 2 * wz, 2 * wy + 2 * xz, 2 * wz + 2 * xy,
+        w2 - x2 + y2 - z2, 2 * yz - 2 * wx, 2 * xz - 2 * wy, 2 * wx + 2 * yz,
+        w2 - x2 - y2 + z2
+    ],
+                         dim=1).reshape(B, 3, 3)
+    return rotMat
