@@ -12,19 +12,21 @@ The source code is released under [MIT License](LICENSE) and the trained weights
 
 This code has been tested with python 3.6, PyTorch 1.4 and CUDA 10.0 on Ubuntu 18.04.
 
-1) Clone this repository: `git lfs clone git@github.com:jsll/pytorch_6dof-graspnet.git`. Note the `lfs` in the command to make sure that the pre-trained models are cloned properly.
+1) pip3 install torch==1.4.0+cu100 torchvision==0.5.0+cu100 -f https://download.pytorch.org/whl/torch_stable.html
 
-2) Clone pointnet++: `git@github.com:erikwijmans/Pointnet2_PyTorch.git`.
+2) Clone this repository: `git lfs clone git@github.com:jsll/pytorch_6dof-graspnet.git`. Note the `lfs` in the command to make sure that the pre-trained models are cloned properly.
 
-3) Run `pip3 install -r Pointnet2_PyTorch\requirements.txt`
+3) Clone pointnet++: `git@github.com:erikwijmans/Pointnet2_PyTorch.git`.
 
-4) `cd pytorch_6dof-graspnet`
+4) Run `pip3 install -r Pointnet2_PyTorch\requirements.txt`
 
-4) Run `pip install -r requirements.txt` to install necessary python libraries.
+5) `cd pytorch_6dof-graspnet`
 
-5) (optional) For multi-gpu training only: Install horovod and MPI from [here](https://github.com/horovod/horovod). We used single-gpu training for training VAE and 8-gpu training for the evaluator network.
+6) Run `pip3 install -r requirements.txt` to install necessary python libraries.
 
-6) Download the checkpoints to the `checkpoints` folder. Trained checkpoints are released under [CC-BY-NC-SA 2.0](TRAINED_MODEL_LICENSE) and can be downloaded from [here](https://drive.google.com/drive/folders/1mVX2kqXg9BZ22y3HEyqta20tiQrL8OK_?usp=sharing).
+7) (optional) For multi-gpu training only: Install horovod and MPI from [here](https://github.com/horovod/horovod). We used single-gpu training for training VAE and 8-gpu training for the evaluator network.
+
+8) Download the checkpoints to the `checkpoints` folder. Trained checkpoints are released under [CC-BY-NC-SA 2.0](TRAINED_MODEL_LICENSE) and can be downloaded from [here](https://drive.google.com/drive/folders/1mVX2kqXg9BZ22y3HEyqta20tiQrL8OK_?usp=sharing).
 
 ## Demo
 
