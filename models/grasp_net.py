@@ -157,8 +157,10 @@ class GraspNetModel:
             prediction, confidence = out
             # compute number of correct
             if self.opt.arch == "vae":
+                predicted_cp = utils.transform_control_points(
+                    prediction, predicted_cp.shape[0], device=self.device)
                 reconstruction_loss, _ = self.criterion[1](
-                    prediction,
+                    predicted_cp,
                     self.targets,
                     confidence=confidence,
                     confidence_weight=self.opt.confidence_weight,
