@@ -22,7 +22,7 @@ class GraspEstimator:
         self.opt = opt
         self.target_pc_size = opt.target_pc_size
         self.num_refine_steps = opt.refine_steps
-        self.refine_method = opt.refinement
+        self.refine_method = opt.refinement_method
         self.num_grasp_samples = opt.num_grasp_samples
         self.threshold = opt.threshold
         self.use_gpu = True  # opt.use_gpu
