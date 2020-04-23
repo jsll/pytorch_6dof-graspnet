@@ -12,4 +12,6 @@ mayavi
 rtree 
 scipy 
 matplotlib
-
+easydict
+trimesh
+opencv-python
