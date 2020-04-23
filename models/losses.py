@@ -125,11 +125,10 @@ def min_distance_loss(pred_control_points,
     error = torch.mean(
         error, -1)  # average L1 for all the control points. (N_pred, N_gt)
 
-    min_distance_error = error.min(1)[
-        0]  # take the min distance for each gt control point. (N_gt)
+    min_distance_error, closest_index = error.min(
+        0)  #[0]  # take the min distance for each gt control point. (N_gt)
     #print('min_distance_error', get_shape(min_distance_error))
     if confidence is not None:
-        closest_index = torch.argmin(error, 1)  # (N_gt)
         #print('closest_index', get_shape(closest_index))
         selected_confidence = torch.nn.functional.one_hot(
             closest_index,
