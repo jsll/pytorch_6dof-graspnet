@@ -45,9 +45,12 @@ class GraspEstimator:
     ):
         pc, pc_mean = self.prepare_pc(pc)
         grasps, confidence, z = self.generate_grasps(pc)
+
         improved_eulers, improved_ts, improved_success = self.refine_grasps(
             pc, grasps, self.refine_method, self.num_refine_steps)
-        improved_success = np.asarray(improved_success).squeeze()
+
+        improved_success = np.asarray(improved_success)
+
         if self.choose_fn is None:
             selection_mask = np.ones(improved_success.shape, dtype=np.float32)
         else:

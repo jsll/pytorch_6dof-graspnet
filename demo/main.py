@@ -1,10 +1,3 @@
-# Copyright (c) 2019, NVIDIA CORPORATION.  All rights reserved.
-#
-# NVIDIA CORPORATION and its licensors retain all intellectual property
-# and proprietary rights in and to this software, related documentation
-# and any modifications thereto.  Any use, reproduction, disclosure or
-# distribution of this software and related documentation without an express
-# license agreement from NVIDIA CORPORATION is strictly prohibited.
 from __future__ import print_function
 
 import numpy as np
@@ -28,7 +21,7 @@ def make_parser():
         '--grasp_sampler_folder',
         type=str,
         default=
-        'checkpoints/gan_lr_0002_bs_10_scale_1_npoints_128_radius_02_latent_size_2/'
+        'checkpoints/gan_lr_0002_bs_200_scale_1_npoints_128_radius_02_latent_size_2/'
     )
     parser.add_argument(
         '--grasp_evaluator_folder',
@@ -124,11 +117,9 @@ def main(args):
             generated_grasps, generated_scores = estimator.generate_and_refine_grasps(
                 data["pc"].squeeze())
             mlab.figure(bgcolor=(1, 1, 1))
-            draw_scene(
-                data["pc"].squeeze(),
-                grasps=generated_grasps,
-                grasp_scores=generated_scores,
-            )
+            draw_scene(data["pc"][0],
+                       grasps=generated_grasps,
+                       grasp_scores=generated_scores)
             print('close the window to continue to next object . . .')
             mlab.show()
     else:
