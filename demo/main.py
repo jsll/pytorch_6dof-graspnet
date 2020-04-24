@@ -27,7 +27,7 @@ def make_parser():
         '--grasp_evaluator_folder',
         type=str,
         default=
-        'checkpoints/evaluator_lr_0002_bs_10_scale_1_npoints_128_radius_02/')
+        'checkpoints/evaluator_lr_0002_bs_30_scale_1_npoints_128_radius_02/')
     parser.add_argument('--refinement_method',
                         choices={"gradient", "sampling"},
                         default='sampling')
@@ -37,7 +37,16 @@ def make_parser():
     parser.add_argument('--threshold', type=float, default=0.8)
     parser.add_argument('--target_pc_size', type=int, default=1024)
     parser.add_argument('--num_grasp_samples', type=int, default=10)
-    parser.add_argument('--gpu', action='store_true')
+    parser.add_argument(
+        '--batch_size',
+        type=int,
+        default=30,
+        help=
+        "Set the batch size of the number of grasps we want to process at a time. This is to overcome the limiting GPU memory."
+    )
+    parser.add_argument('--cpu',
+                        action='store_true',
+                        help="Set if we want to run everything on CPU.")
     parser.add_argument('--train_data', action='store_true')
     opts, _ = parser.parse_known_args()
     if opts.train_data:

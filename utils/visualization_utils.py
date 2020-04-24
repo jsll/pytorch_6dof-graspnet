@@ -62,7 +62,7 @@ def draw_scene(pc,
         pc.
     """
 
-    max_grasps = 10
+    max_grasps = 100
     grasps = np.array(grasps)
 
     if grasp_scores is not None:

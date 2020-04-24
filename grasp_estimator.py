@@ -10,6 +10,7 @@ import trimesh.transformations as tra
 import copy
 import os
 from utils import utils
+import math
 
 
 class GraspEstimator:
@@ -25,7 +26,8 @@ class GraspEstimator:
         self.refine_method = opt.refinement_method
         self.num_grasp_samples = opt.num_grasp_samples
         self.threshold = opt.threshold
-        self.use_gpu = True  # opt.use_gpu
+        self.batch_size = opt.batch_size
+        self.use_cpu = opt.cpu
         self.choose_fn = None
         self.choose_fns = {
             "all":
@@ -35,22 +37,40 @@ class GraspEstimator:
             "better_than_threshold_in_sequence":
             utils.choose_grasps_better_than_threshold_in_sequence,
         }
-        self.device = torch.device("cuda:0" if self.use_gpu else "cpu")
+        self.device = torch.device("cpu" if self.use_cpu else "cuda:0")
         self.grasp_evaluator = create_model(grasp_evaluator_opt)
         self.grasp_sampler = create_model(grasp_sampler_opt)
+
+    def keep_inliers(self, grasps, confidences, z, pc, inlier_indices_list):
+        for i, inlier_indices in enumerate(inlier_indices_list):
+            grasps[i] = grasps[i][inlier_indices]
+            confidences[i] = confidences[i][inlier_indices]
+            z[i] = z[i][inlier_indices]
+            pc[i] = pc[i][inlier_indices]
 
     def generate_and_refine_grasps(
             self,
             pc,
     ):
-        pc, pc_mean = self.prepare_pc(pc)
-        grasps, confidence, z = self.generate_grasps(pc)
-
-        improved_eulers, improved_ts, improved_success = self.refine_grasps(
-            pc, grasps, self.refine_method, self.num_refine_steps)
-
-        improved_success = np.asarray(improved_success)
-
+        pc_list, pc_mean = self.prepare_pc(pc)
+        grasps_list, confidence_list, z_list = self.generate_grasps(pc_list)
+        inlier_indices = utils.get_inlier_grasp_indices(
+            grasps_list,
+            torch.tensor(pc_mean).to(self.device),
+            threshold=1.0,
+            device=self.device)
+        self.keep_inliers(grasps_list, confidence_list, z_list, pc_list,
+                          inlier_indices)
+        improved_eulers, improved_ts, improved_success = [], [], []
+        for pc, grasps in zip(pc_list, grasps_list):
+            out = self.refine_grasps(pc, grasps, self.refine_method,
+                                     self.num_refine_steps)
+            improved_eulers.append(out[0])
+            improved_ts.append(out[1])
+            improved_success.append(out[2])
+        improved_eulers = np.hstack(improved_eulers)
+        improved_ts = np.hstack(improved_ts)
+        improved_success = np.hstack(improved_success)
         if self.choose_fn is None:
             selection_mask = np.ones(improved_success.shape, dtype=np.float32)
         else:
@@ -71,13 +91,23 @@ class GraspEstimator:
             pc = utils.regularize_pc_point_count(pc, self.target_pc_size)
         pc_mean = np.mean(pc, 0)
         pc -= np.expand_dims(pc_mean, 0)
-
         pc = np.tile(pc, (self.num_grasp_samples, 1, 1))
         pc = torch.from_numpy(pc).float().to(self.device)
-        return pc, pc_mean
+        pcs = []
+        for i in range(0, math.ceil(self.num_grasp_samples / self.batch_size)):
+            pcs.append(pc[i * self.batch_size:(i + 1) * self.batch_size])
+        return pcs, pc_mean
 
-    def generate_grasps(self, pc):
-        return self.grasp_sampler.generate_grasps(pc)
+    def generate_grasps(self, pcs):
+        all_grasps = []
+        all_confidence = []
+        all_z = []
+        for pc in pcs:
+            grasps, confidence, z = self.grasp_sampler.generate_grasps(pc)
+            all_grasps.append(grasps)
+            all_confidence.append(confidence)
+            all_z.append(z)
+        return all_grasps, all_confidence, all_z
 
     def refine_grasps(self, pc, grasps, refine_method, num_refine_steps=10):
 
