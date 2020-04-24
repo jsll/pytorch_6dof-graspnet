@@ -185,6 +185,7 @@ class GraspNetModel:
                     device=self.device)
                 return reconstruction_loss, 1
             else:
-                _, predicted = torch.max(prediction, 1)
+
+                predicted = torch.round(torch.sigmoid(prediction)).squeeze()
                 correct = (predicted == self.targets).sum().item()
                 return correct, len(self.targets)

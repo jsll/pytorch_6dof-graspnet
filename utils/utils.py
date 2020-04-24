@@ -646,3 +646,38 @@ def qrot(q, v):
     uv = torch.cross(qvec, v, dim=1)
     uuv = torch.cross(qvec, uv, dim=1)
     return (v + 2 * (q[:, :1] * uv + uuv)).view(original_shape)
+
+
+def get_inlier_grasp_indices(grasp_list, query_point, threshold=1.0, device="cpu"):
+    """This function returns all grasps whose distance between the mid of the finger tips and the query point is less than the threshold value. 
+    
+    Arguments:
+        grasps are given as a list of [B,7] where B is the number of grasps and the other
+        7 values represent teh quaternion and translation.
+        query_point is a 1x3 point in 3D space.
+        threshold represents the maximum distance between a grasp and the query_point
+    """
+    indices_to_keep = []
+    for grasps in grasp_list:
+        grasp_cps = transform_control_points(grasps,
+                                             grasps.shape[0],
+                                             device=device)
+        mid_points = get_mid_of_contact_points(grasp_cps)
+        dist = torch.norm(mid_points - query_point, 2, dim=-1)
+        indices_to_keep.append(torch.where(dist <= threshold))
+    return indices_to_keep
+
+
+def get_mid_of_contact_points(grasp_cps):
+    mid = (grasp_cps[:, 0, :] + grasp_cps[:, 1, :]) / 2.0
+    return mid
+
+
+def euclid_dist(point1, point2):
+    return np.linalg.norm(point1 - point2)
+
+def partition_array_into_subarrays(array, sub_array_size):
+    subarrays = []
+    for i in range(0, math.ceil(array.shape[0] / sub_array_size)):
+        subarrays.append(array[i * sub_array_size:(i + 1) * sub_array_size])
+    return subarrays

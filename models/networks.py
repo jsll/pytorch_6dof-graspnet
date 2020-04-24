@@ -13,8 +13,8 @@ def get_scheduler(optimizer, opt):
     if opt.lr_policy == 'lambda':
 
         def lambda_rule(epoch):
-            lr_l = 1.0 - max(0, epoch + 1 + 1 -
-                             opt.niter) / float(opt.niter_decay + 1)
+            lr_l = 1.0 - max(
+                0, epoch + 1 + 1 - opt.niter) / float(opt.niter_decay + 1)
             return lr_l
 
         scheduler = lr_scheduler.LambdaLR(optimizer, lr_lambda=lambda_rule)
@@ -101,9 +101,9 @@ def define_loss(opt):
 
 
 class GraspSampler(nn.Module):
-    def __init__(self, device):
+    def __init__(self, latent_size, device):
         super(GraspSampler, self).__init__()
-
+        self.latent_size = latent_size
         self.device = device
 
     def create_decoder(self, model_scale, pointnet_radius, pointnet_nclusters,
@@ -134,6 +134,9 @@ class GraspSampler(nn.Module):
         z = z.expand(-1, pc.shape[1], -1)
         return torch.cat((pc, z), -1)
 
+    def get_latent_size(self):
+        return self.latent_size
+
 
 class GraspSamplerVAE(GraspSampler):
     """Network for learning a generative VAE grasp-sampler
@@ -144,13 +147,12 @@ class GraspSamplerVAE(GraspSampler):
                  pointnet_nclusters=128,
                  latent_size=2,
                  device="cpu"):
-        super(GraspSamplerVAE, self).__init__(device)
+        super(GraspSamplerVAE, self).__init__(latent_size, device)
         self.create_encoder(model_scale, pointnet_radius, pointnet_nclusters)
 
         self.create_decoder(model_scale, pointnet_radius, pointnet_nclusters,
                             latent_size + 3)
         self.create_bottleneck(model_scale * 1024, latent_size)
-        self.latent_size = latent_size
 
     def create_encoder(
             self,
@@ -215,6 +217,16 @@ class GraspSamplerVAE(GraspSampler):
         qt, confidence = self.decode(pc, z)
         return qt, confidence, z.squeeze()
 
+    def generate_dense_latents(self, resolution):
+        """
+        For the VAE sampler we consider dense latents to correspond to those between -2 and 2
+        """
+        latents = torch.meshgrid(*[
+            torch.linspace(-2, 2, resolution) for i in range(self.latent_size)
+        ])
+        return torch.stack([latents[i].flatten() for i in range(len(latents))],
+                           dim=-1).to(self.device)
+
 
 class GraspSamplerGAN(GraspSampler):
     """
@@ -230,10 +242,9 @@ class GraspSamplerGAN(GraspSampler):
                  pointnet_nclusters,
                  latent_size=2,
                  device="cpu"):
-        super(GraspSamplerGAN, self).__init__(device)
+        super(GraspSamplerGAN, self).__init__(latent_size, device)
         self.create_decoder(model_scale, pointnet_radius, pointnet_nclusters,
                             latent_size + 3)
-        self.latent_size = latent_size
 
     def sample_latent(self, batch_size):
         return torch.rand(batch_size, self.latent_size).to(self.device)
@@ -247,6 +258,13 @@ class GraspSamplerGAN(GraspSampler):
             z = self.sample_latent(pc.shape[0])
         qt, confidence = self.decode(pc, z)
         return qt, confidence, z.squeeze()
+
+    def generate_dense_latents(self, resolution):
+        latents = torch.meshgrid(*[
+            torch.linspace(0, 1, resolution) for i in range(self.latent_size)
+        ])
+        return torch.stack([latents[i].flatten() for i in range(len(latents))],
+                           dim=-1).to(self.device)
 
 
 class GraspEvaluator(nn.Module):

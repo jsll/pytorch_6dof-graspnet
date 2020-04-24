@@ -98,7 +98,7 @@ class Writer:
                 self.display.add_scalar('data/test_acc/grasp_prediction', acc,
                                         epoch)
             else:
-                self.display.add_scalar('data/test_acc/grasp_reconstruction',
+                self.display.add_scalar('data/test_loss/grasp_reconstruction',
                                         acc, epoch)
 
     def reset_counter(self):
