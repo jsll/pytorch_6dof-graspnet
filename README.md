@@ -20,7 +20,7 @@ This code has been tested with python 3.6, PyTorch 1.4 and CUDA 10.0 on Ubuntu
 
 3) Clone pointnet++: `git@github.com:erikwijmans/Pointnet2_PyTorch.git`.
 
-4) Run `pip3 install -r Pointnet2_PyTorch\requirements.txt`
+4) Run `cd Pointnet2_PyTorch && pip3 install -r requirements.txt`
 
 5) `cd pytorch_6dof-graspnet`
 
