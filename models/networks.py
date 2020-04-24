@@ -13,7 +13,7 @@ def get_scheduler(optimizer, opt):
     if opt.lr_policy == 'lambda':
 
         def lambda_rule(epoch):
-            lr_l = 1.0 - max(0, epoch + 1 + opt.epoch_count -
+            lr_l = 1.0 - max(0, epoch + 1 + 1 -
                              opt.niter) / float(opt.niter_decay + 1)
             return lr_l
 
