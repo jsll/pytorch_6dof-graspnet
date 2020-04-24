@@ -675,3 +675,9 @@ def get_mid_of_contact_points(grasp_cps):
 
 def euclid_dist(point1, point2):
     return np.linalg.norm(point1 - point2)
+
+def partition_array_into_subarrays(array, sub_array_size):
+    subarrays = []
+    for i in range(0, math.ceil(array.shape[0] / sub_array_size)):
+        subarrays.append(array[i * sub_array_size:(i + 1) * sub_array_size])
+    return subarrays

@@ -10,7 +10,6 @@ import trimesh.transformations as tra
 import copy
 import os
 from utils import utils
-import math
 
 
 class GraspEstimator:
@@ -24,10 +23,15 @@ class GraspEstimator:
         self.target_pc_size = opt.target_pc_size
         self.num_refine_steps = opt.refine_steps
         self.refine_method = opt.refinement_method
-        self.num_grasp_samples = opt.num_grasp_samples
         self.threshold = opt.threshold
         self.batch_size = opt.batch_size
         self.use_cpu = opt.cpu
+        self.generate_dense_grasps = opt.generate_dense_grasps
+        if self.generate_dense_grasps:
+            self.num_grasps_per_dim = opt.num_grasp_samples
+            self.num_grasp_samples = opt.num_grasp_samples * opt.num_grasp_samples
+        else:
+            self.num_grasp_samples = opt.num_grasp_samples
         self.choose_fn = None
         self.choose_fns = {
             "all":
@@ -94,19 +98,30 @@ class GraspEstimator:
         pc = np.tile(pc, (self.num_grasp_samples, 1, 1))
         pc = torch.from_numpy(pc).float().to(self.device)
         pcs = []
-        for i in range(0, math.ceil(self.num_grasp_samples / self.batch_size)):
-            pcs.append(pc[i * self.batch_size:(i + 1) * self.batch_size])
+        pcs = utils.partition_array_into_subarrays(pc, self.batch_size)
         return pcs, pc_mean
 
     def generate_grasps(self, pcs):
         all_grasps = []
         all_confidence = []
         all_z = []
-        for pc in pcs:
-            grasps, confidence, z = self.grasp_sampler.generate_grasps(pc)
-            all_grasps.append(grasps)
-            all_confidence.append(confidence)
-            all_z.append(z)
+        if self.generate_dense_grasps:
+            latent_samples = self.grasp_sampler.net.module.generate_dense_latents(
+                self.num_grasps_per_dim)
+            latent_samples = utils.partition_array_into_subarrays(
+                latent_samples, self.batch_size)
+            for latent_sample, pc in zip(latent_samples, pcs):
+                grasps, confidence, z = self.grasp_sampler.generate_grasps(
+                    pc, latent_sample)
+                all_grasps.append(grasps)
+                all_confidence.append(confidence)
+                all_z.append(z)
+        else:
+            for pc in pcs:
+                grasps, confidence, z = self.grasp_sampler.generate_grasps(pc)
+                all_grasps.append(grasps)
+                all_confidence.append(confidence)
+                all_z.append(z)
         return all_grasps, all_confidence, all_z
 
     def refine_grasps(self, pc, grasps, refine_method, num_refine_steps=10):

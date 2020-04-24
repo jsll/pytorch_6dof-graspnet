@@ -38,6 +38,13 @@ def make_parser():
     parser.add_argument('--target_pc_size', type=int, default=1024)
     parser.add_argument('--num_grasp_samples', type=int, default=10)
     parser.add_argument(
+        '--generate_dense_grasps',
+        action='store_true',
+        help=
+        "If enabled, it will create a [num_grasp_samples x num_grasp_samples] dense grid of latent space values and generate grasps from these."
+    )
+
+    parser.add_argument(
         '--batch_size',
         type=int,
         default=30,
