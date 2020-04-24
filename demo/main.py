@@ -42,7 +42,7 @@ def make_parser():
         type=int,
         default=30,
         help=
-        "Set the batch size of the number of grasps we want to process at a time. This is to overcome the limiting GPU memory."
+        "Set the batch size of the number of grasps we want to process and can fit into the GPU memory at each forward pass. The batch_size can be increased for a GPU with more memory."
     )
     parser.add_argument('--cpu',
                         action='store_true',
