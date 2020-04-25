@@ -17,17 +17,12 @@ def make_parser():
     parser = argparse.ArgumentParser(
         description='6-DoF GraspNet Demo',
         formatter_class=argparse.ArgumentDefaultsHelpFormatter)
-    parser.add_argument(
-        '--grasp_sampler_folder',
-        type=str,
-        default=
-        'checkpoints/gan_lr_0002_bs_200_scale_1_npoints_128_radius_02_latent_size_2/'
-    )
-    parser.add_argument(
-        '--grasp_evaluator_folder',
-        type=str,
-        default=
-        'checkpoints/evaluator_lr_0002_bs_340_scale_1_npoints_128_radius_02/')
+    parser.add_argument('--grasp_sampler_folder',
+                        type=str,
+                        default='checkpoints/gan_pretrained/')
+    parser.add_argument('--grasp_evaluator_folder',
+                        type=str,
+                        default='checkpoints/evaluator_pretrained/')
     parser.add_argument('--refinement_method',
                         choices={"gradient", "sampling"},
                         default='sampling')
