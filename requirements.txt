@@ -1,7 +1,7 @@
 h5py==2.10.0
 tqdm==4.45.0
 mayavi==4.7.1
-torch==1.4.0+cu100
+torch==1.4.0+cu100 -f <https://download.pytorch.org/whl/torch_stable.html>
 pointnet2_ops==3.0.0
 trimesh==3.6.30
 numpy==1.17.4

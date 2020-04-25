@@ -13,14 +13,14 @@ The source code is released under [MIT License](LICENSE) and the trained weights
 This code has been tested with python 3.6, PyTorch 1.4 and CUDA 10.0 on Ubuntu
 18.04. To install do
 
-1) pip3 install torch==1.4.0+cu100 torchvision==0.5.0+cu100 -f <https://download.pytorch.org/whl/torch_stable.html>
+1) `pip3 install torch==1.4.0+cu100 torchvision==0.5.0+cu100 -f <https://download.pytorch.org/whl/torch_stable.html>`
 
 2) Clone this repository: `git clone
    git@github.com:jsll/pytorch_6dof-graspnet.git`.
 
 3) Clone pointnet++: `git@github.com:erikwijmans/Pointnet2_PyTorch.git`.
 
-4) Run `pip3 install -r Pointnet2_PyTorch\requirements.txt`
+4) Run `cd Pointnet2_PyTorch && pip3 install -r requirements.txt`
 
 5) `cd pytorch_6dof-graspnet`
 
