@@ -27,14 +27,30 @@ def make_parser():
         '--grasp_evaluator_folder',
         type=str,
         default=
-        'checkpoints/evaluator_lr_0002_bs_30_scale_1_npoints_128_radius_02/')
+        'checkpoints/evaluator_lr_0002_bs_340_scale_1_npoints_128_radius_02/')
     parser.add_argument('--refinement_method',
                         choices={"gradient", "sampling"},
                         default='sampling')
     parser.add_argument('--refine_steps', type=int, default=10)
 
     parser.add_argument('--npy_folder', type=str, default='demo/data/')
-    parser.add_argument('--threshold', type=float, default=0.8)
+    parser.add_argument(
+        '--threshold',
+        type=float,
+        default=0.8,
+        help=
+        "When choose_fn is something else than all, all grasps with a score given by the evaluator notwork less than the threshold are removed"
+    )
+    parser.add_argument(
+        '--choose_fn',
+        choices={
+            "all", "better_than_threshold", "better_than_threshold_in_sequence"
+        },
+        default='better_than_threshold',
+        help=
+        "If all, no grasps are removed. If better than threshold, only the last refined grasps are considered while better_than_threshold_in_sequence consideres all refined grasps"
+    )
+
     parser.add_argument('--target_pc_size', type=int, default=1024)
     parser.add_argument('--num_grasp_samples', type=int, default=10)
     parser.add_argument(
@@ -51,9 +67,6 @@ def make_parser():
         help=
         "Set the batch size of the number of grasps we want to process and can fit into the GPU memory at each forward pass. The batch_size can be increased for a GPU with more memory."
     )
-    parser.add_argument('--cpu',
-                        action='store_true',
-                        help="Set if we want to run everything on CPU.")
     parser.add_argument('--train_data', action='store_true')
     opts, _ = parser.parse_known_args()
     if opts.train_data:

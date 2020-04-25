@@ -25,14 +25,13 @@ class GraspEstimator:
         self.refine_method = opt.refinement_method
         self.threshold = opt.threshold
         self.batch_size = opt.batch_size
-        self.use_cpu = opt.cpu
         self.generate_dense_grasps = opt.generate_dense_grasps
         if self.generate_dense_grasps:
             self.num_grasps_per_dim = opt.num_grasp_samples
             self.num_grasp_samples = opt.num_grasp_samples * opt.num_grasp_samples
         else:
             self.num_grasp_samples = opt.num_grasp_samples
-        self.choose_fn = None
+        self.choose_fn = opt.choose_fn
         self.choose_fns = {
             "all":
             None,
@@ -41,7 +40,7 @@ class GraspEstimator:
             "better_than_threshold_in_sequence":
             utils.choose_grasps_better_than_threshold_in_sequence,
         }
-        self.device = torch.device("cpu" if self.use_cpu else "cuda:0")
+        self.device = torch.device("cuda:0")
         self.grasp_evaluator = create_model(grasp_evaluator_opt)
         self.grasp_sampler = create_model(grasp_sampler_opt)
 
@@ -75,12 +74,12 @@ class GraspEstimator:
         improved_eulers = np.hstack(improved_eulers)
         improved_ts = np.hstack(improved_ts)
         improved_success = np.hstack(improved_success)
-        if self.choose_fn is None:
+        if self.choose_fn is "all":
             selection_mask = np.ones(improved_success.shape, dtype=np.float32)
         else:
             selection_mask = self.choose_fns[self.choose_fn](improved_eulers,
                                                              improved_ts,
-                                                             selection_mask,
+                                                             improved_success,
                                                              self.threshold)
         grasps = utils.rot_and_trans_to_grasps(improved_eulers, improved_ts,
                                                selection_mask)
@@ -187,31 +186,33 @@ class GraspEstimator:
                                       grasp_eulers,
                                       grasp_trans,
                                       last_success=None):
-        if last_success is None:
+        with torch.no_grad():
+            if last_success is None:
+                grasp_pcs = utils.control_points_from_rot_and_trans(
+                    grasp_eulers, grasp_trans, self.device)
+                last_success = self.grasp_evaluator.evaluate_grasps(
+                    pcs, grasp_pcs)
+
+            delta_t = 2 * (torch.rand(grasp_trans.shape).to(self.device) - 0.5)
+            delta_t *= 0.02
+            delta_euler_angles = (
+                torch.rand(grasp_eulers.shape).to(self.device) - 0.5) * 2
+            perturbed_translation = grasp_trans + delta_t
+            perturbed_euler_angles = grasp_eulers + delta_euler_angles
             grasp_pcs = utils.control_points_from_rot_and_trans(
-                grasp_eulers, grasp_trans, self.device)
-            last_success = self.grasp_evaluator.evaluate_grasps(pcs, grasp_pcs)
+                perturbed_euler_angles, perturbed_translation, self.device)
 
-        delta_t = 2 * (torch.rand(grasp_trans.shape).to(self.device) - 0.5)
-        delta_t *= 0.02
-        delta_euler_angles = (torch.rand(grasp_eulers.shape).to(self.device) -
-                              0.5) * 2
-        perturbed_translation = grasp_trans + delta_t
-        perturbed_euler_angles = grasp_eulers + delta_euler_angles
-        grasp_pcs = utils.control_points_from_rot_and_trans(
-            perturbed_euler_angles, perturbed_translation, self.device)
+            perturbed_success = self.grasp_evaluator.evaluate_grasps(
+                pcs, grasp_pcs)
+            ratio = perturbed_success / torch.max(
+                last_success,
+                torch.tensor(0.0001).to(self.device))
 
-        perturbed_success = self.grasp_evaluator.evaluate_grasps(
-            pcs, grasp_pcs)
-        ratio = perturbed_success / torch.max(
-            last_success,
-            torch.tensor(0.0001).to(self.device))
+            mask = torch.rand(ratio.shape).to(self.device) <= ratio
 
-        mask = torch.rand(ratio.shape).to(self.device) <= ratio
-
-        next_success = last_success
-        ind = torch.where(mask)[0]
-        next_success[ind] = perturbed_success[ind]
-        grasp_trans[ind].data = perturbed_translation.data[ind]
-        grasp_eulers[ind].data = perturbed_euler_angles.data[ind]
-        return last_success.squeeze(), next_success
+            next_success = last_success
+            ind = torch.where(mask)[0]
+            next_success[ind] = perturbed_success[ind]
+            grasp_trans[ind].data = perturbed_translation.data[ind]
+            grasp_eulers[ind].data = perturbed_euler_angles.data[ind]
+            return last_success.squeeze(), next_success
