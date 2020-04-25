@@ -30,10 +30,14 @@ This code has been tested with python 3.6, PyTorch 1.4 and CUDA 10.0 on Ubuntu
    checkpoints/download_models.sh` or manually from [here](https://drive.google.com/drive/folders/1iQsyaDNIR8mEyndFRXbYDtYwkROHDhZv?usp=sharing). Trained
    models are released under [CC-BY-NC-SA 2.0](TRAINED_MODEL_LICENSE).
 
+## Disclaimer
+
+The pre-trained models released in this repo are retrained from scratch and not converted from the original ones <https://github.com/NVlabs/6dof-graspnet> trained in Tensorflow. I tried to convert the Tensorflow models but with no luck. Although I trained the new models for a substantial amount of time on the same training data, no guarantees to their performance compared to the original work can be given.
+
 ## Updates
 
 In the paper, the authors only used gradient-based refinement. Recently, they released a Metropolis-Hastings
-sampling which they found to give better results in shorter time. As a result, I keep the Metropolis-Hastings sampling as the default for the demo.
+sampling method which they found to give better results in shorter time. As a result, I keep the Metropolis-Hastings sampling as the default for the demo.
 
 This repository also includes an improved grasp sampling network which was
 proposed here <https://github.com/NVlabs/6dof-graspnet>. The new grasp sampling
@@ -88,6 +92,8 @@ python3 train.py  --arch {vae,gan,evaluator}  --dataset_root_folder $DATASET_ROO
 
 where the `$DATASET_ROOT_FOLDER` is the path to the dataset you downloaded.
 
+To monitor the training, run `tensorboard --logdir checkpoints/` and click <http://localhost:6006/>.
+
 For more training options run
 GAN Training Example Command:
 
@@ -104,7 +110,7 @@ would appreciate it if someone could convert it and send in a pull request.
 ## Citation
 
 If you find this work useful in your research, please consider citing the
-original authors work:
+original authors' work:
 
 ```
 inproceedings{mousavian2019graspnet,
