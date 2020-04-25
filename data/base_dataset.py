@@ -229,7 +229,7 @@ class BaseDataset(data.Dataset):
 
     def sample_grasp_indexes(self, n, grasps, qualities):
         """
-          Stratified sampling of the graps.
+          Stratified sampling of the grasps.
         """
         nonzero_rows = [i for i in range(len(grasps)) if len(grasps[i]) > 0]
         num_clusters = len(nonzero_rows)

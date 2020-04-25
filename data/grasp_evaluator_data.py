@@ -20,11 +20,16 @@ class GraspEvaluatorData(BaseDataset):
         self.root = opt.dataset_root_folder
         self.paths = self.make_dataset()
         self.size = len(self.paths)
-        self.ratio_positive = ratio_positive
         self.collision_hard_neg_queue = {}
-        self.ratio_hardnegative = ratio_hardnegative
         #self.get_mean_std()
         opt.input_nc = self.ninput_channels
+        self.ratio_positive = self.set_ratios(ratio_positive)
+        self.ratio_hardnegative = self.set_ratios(ratio_hardnegative)
+
+    def set_ratios(self, ratio):
+        if int(self.opt.num_grasps_per_object * ratio) == 0:
+            return 1 / self.opt.num_grasps_per_object
+        return ratio
 
     def __getitem__(self, index):
         path = self.paths[index]
@@ -198,11 +203,9 @@ class GraspEvaluatorData(BaseDataset):
         num_negative = self.opt.num_grasps_per_object - num_positive
         negative_clusters = self.sample_grasp_indexes(num_negative, neg_grasps,
                                                       neg_qualities)
-
         hard_neg_candidates = []
         # Fill in Positive Examples.
         for positive_cluster in positive_clusters:
-            #print(positive_cluster)
             selected_grasp = pos_grasps[positive_cluster[0]][
                 positive_cluster[1]]
             selected_quality = pos_qualities[positive_cluster[0]][
@@ -241,7 +244,6 @@ class GraspEvaluatorData(BaseDataset):
                 #print('add hard neg')
                 collisions, heuristic_qualities = utils.evaluate_grasps(
                     hard_neg_candidates, obj_mesh)
-
                 hard_neg_mask = collisions | (heuristic_qualities < 0.001)
                 hard_neg_indexes = np.where(hard_neg_mask)[0].tolist()
                 np.random.shuffle(hard_neg_indexes)
