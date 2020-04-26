@@ -120,3 +120,14 @@ inproceedings{mousavian2019graspnet,
   year={2019}
 }
 ```
+
+as well as my implementation
+
+```
+@article{pytorch_6dof-graspnet,
+      Author = {Jens Lundell},
+      Title = {6-DOF GraspNet Pytorch},
+      Journal = {<https://github.com/jsll/pytorch_6dof-graspnet},>
+      Year = {2020}
+}
+```
