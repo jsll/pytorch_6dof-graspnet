@@ -17,8 +17,7 @@ class BaseOptions:
         self.parser.add_argument(
             '--dataset_root_folder',
             type=str,
-            default=
-            '/home/jens/Documents/datasets/grasping/unified_grasp_data/',
+            default='/home/jens/Documents/datasets/grasping/unified_grasp_data/',
             help='path to root directory of the dataset.')
         self.parser.add_argument('--num_objects_per_batch',
                                  type=int,
@@ -35,15 +34,13 @@ class BaseOptions:
             '--occlusion_nclusters',
             type=int,
             default=0,
-            help=
-            'clusters the points to nclusters to be selected for simulating the dropout'
+            help='clusters the points to nclusters to be selected for simulating the dropout'
         )
         self.parser.add_argument(
             '--occlusion_dropout_rate',
             type=float,
             default=0,
-            help=
-            'probability at which the clusters are removed from point cloud.')
+            help='probability at which the clusters are removed from point cloud.')
         self.parser.add_argument('--depth_noise', type=float,
                                  default=0.0)  # to be used in the data reader.
         self.parser.add_argument('--num_grasp_clusters', type=int, default=32)
@@ -79,30 +76,26 @@ class BaseOptions:
             '--gripper',
             type=str,
             default='panda',
-            help=
-            'type of the gripper. Leave it to panda if you want to use it for franka robot'
+            help='type of the gripper. Leave it to panda if you want to use it for franka robot'
         )
         self.parser.add_argument('--latent_size', type=int, default=2)
         self.parser.add_argument(
             '--gripper_pc_npoints',
             type=int,
             default=-1,
-            help=
-            'number of points representing the gripper. -1 just uses the points on the finger and also the base. other values use subsampling of the gripper mesh'
+            help='number of points representing the gripper. -1 just uses the points on the finger and also the base. other values use subsampling of the gripper mesh'
         )
         self.parser.add_argument(
             '--merge_pcs_in_vae_encoder',
             type=int,
             default=0,
-            help=
-            'whether to create unified pc in encoder by coloring the points (similar to evaluator'
+            help='whether to create unified pc in encoder by coloring the points (similar to evaluator'
         )
         self.parser.add_argument(
             '--allowed_categories',
             type=str,
             default='',
-            help=
-            'if left blank uses all the categories in the <DATASET_ROOT_PATH>/splits/<category>.json, otherwise only chooses the categories that are set.'
+            help='if left blank uses all the categories in the <DATASET_ROOT_PATH>/splits/<category>.json, otherwise only chooses the categories that are set.'
         )
         self.parser.add_argument('--blacklisted_categories',
                                  type=str,
@@ -116,22 +109,19 @@ class BaseOptions:
             '--model_scale',
             type=int,
             default=1,
-            help=
-            'the scale of the parameters. Use scale >= 1. Scale=2 increases the number of parameters in model by 4x.'
+            help='the scale of the parameters. Use scale >= 1. Scale=2 increases the number of parameters in model by 4x.'
         )
         self.parser.add_argument(
             '--splits_folder_name',
             type=str,
             default='splits',
-            help=
-            'Folder name for the directory that has all the jsons for train/test splits.'
+            help='Folder name for the directory that has all the jsons for train/test splits.'
         )
         self.parser.add_argument(
             '--grasps_folder_name',
             type=str,
             default='grasps',
-            help=
-            'Directory that contains the grasps. Will be joined with the dataset_root_folder and the file names as defined in the splits.'
+            help='Directory that contains the grasps. Will be joined with the dataset_root_folder and the file names as defined in the splits.'
         )
         self.parser.add_argument(
             '--pointnet_radius',
@@ -140,8 +130,7 @@ class BaseOptions:
             default=0.02)
         self.parser.add_argument(
             '--pointnet_nclusters',
-            help=
-            'Number of cluster centroids for PointNet++, just the first layer',
+            help='Number of cluster centroids for PointNet++, just the first layer',
             type=int,
             default=128)
         self.parser.add_argument(
@@ -158,14 +147,12 @@ class BaseOptions:
             '--grasps_ratio',
             type=float,
             default=1.0,
-            help=
-            'used for checking the effect of number of grasps per object on the success of the model.'
+            help='used for checking the effect of number of grasps per object on the success of the model.'
         )
         self.parser.add_argument(
             '--skip_error',
             action='store_true',
-            help=
-            'Will not fill the dataset with a new grasp if it raises NoPositiveGraspsException'
+            help='Will not fill the dataset with a new grasp if it raises NoPositiveGraspsException'
         )
         self.parser.add_argument(
             '--balanced_data',
@@ -176,14 +163,9 @@ class BaseOptions:
             '--confidence_weight',
             type=float,
             default=1.0,
-            help=
-            'initially I wanted to compute confidence for vae and evaluator outputs, '
+            help='initially I wanted to compute confidence for vae and evaluator outputs, '
             'setting the confidence weight to 1. immediately pushes the confidence to 1.0.'
         )
-        self.parser.add_argument(
-            '--run_mp',
-            action='store_true',
-            help='if true, we will train a grasping network')
 
     def parse(self):
         if not self.initialized:
@@ -194,7 +176,8 @@ class BaseOptions:
             self.opt.dataset_split = "train"
         else:
             self.opt.dataset_split = "test"
-        self.opt.batch_size = self.opt.num_objects_per_batch * self.opt.num_grasps_per_object
+        self.opt.batch_size = self.opt.num_objects_per_batch * \
+            self.opt.num_grasps_per_object
         str_ids = self.opt.gpu_ids.split(',')
         self.opt.gpu_ids = []
         for str_id in str_ids:
@@ -233,7 +216,8 @@ class BaseOptions:
             self.opt.name = name
             expr_dir = os.path.join(self.opt.checkpoints_dir, self.opt.name)
             if os.path.isdir(expr_dir) and not self.opt.continue_train:
-                option = "Directory " + expr_dir + " already exists and you have not chosen to continue to train.\nDo you want to override that training instance with a new one the press (Y/N)."
+                option = "Directory " + expr_dir + \
+                    " already exists and you have not chosen to continue to train.\nDo you want to override that training instance with a new one the press (Y/N)."
                 print(option)
                 while True:
                     choice = input()
