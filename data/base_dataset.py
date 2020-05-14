@@ -7,7 +7,7 @@ import json
 from utils.sample import Object
 from utils import utils
 import glob
-from renderer.online_object_renderer import OnlineObjectRendererMultiProcess, OnlineObjectRenderer
+from renderer.online_object_renderer import OnlineObjectRenderer
 import threading
 
 
@@ -20,7 +20,6 @@ class BaseDataset(data.Dataset):
     def __init__(self,
                  opt,
                  caching=True,
-                 run_in_another_process=True,
                  min_difference_allowed=(0, 0, 0),
                  max_difference_allowed=(3, 3, 0),
                  collision_hard_neg_min_translation=(-0.03, -0.03, -0.03),
@@ -48,12 +47,7 @@ class BaseDataset(data.Dataset):
             assert (collision_hard_neg_min_translation[i] <=
                     collision_hard_neg_max_translation[i])
 
-        if run_in_another_process:
-            self.renderer = OnlineObjectRendererMultiProcess(caching=True)
-        else:
-            self.renderer = OnlineObjectRenderer(caching=True)
-
-        self.renderer.start()
+        self.renderer = OnlineObjectRenderer(caching=True)
 
         if opt.use_uniform_quaternions:
             self.all_poses = utils.uniform_quaternions()
@@ -325,12 +319,6 @@ class BaseDataset(data.Dataset):
                                          split_file)))[self.opt.dataset_split]
                 ]
         return files
-
-    def __del__(self):
-        print('********** terminating renderer **************')
-        self.renderer.terminate()
-        self.renderer.join()
-        print('done')
 
 
 def collate_fn(batch):
