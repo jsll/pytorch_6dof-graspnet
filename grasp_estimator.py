@@ -59,7 +59,7 @@ class GraspEstimator:
         grasps_list, confidence_list, z_list = self.generate_grasps(pc_list)
         inlier_indices = utils.get_inlier_grasp_indices(
             grasps_list,
-            torch.tensor(pc_mean).to(self.device),
+            torch.zeros(1, 3).to(self.device),
             threshold=1.0,
             device=self.device)
         self.keep_inliers(grasps_list, confidence_list, z_list, pc_list,
