@@ -26,7 +26,7 @@ def make_parser():
     parser.add_argument('--refinement_method',
                         choices={"gradient", "sampling"},
                         default='sampling')
-    parser.add_argument('--refine_steps', type=int, default=10)
+    parser.add_argument('--refine_steps', type=int, default=25)
 
     parser.add_argument('--npy_folder', type=str, default='demo/data/')
     parser.add_argument(
@@ -47,7 +47,7 @@ def make_parser():
     )
 
     parser.add_argument('--target_pc_size', type=int, default=1024)
-    parser.add_argument('--num_grasp_samples', type=int, default=10)
+    parser.add_argument('--num_grasp_samples', type=int, default=200)
     parser.add_argument(
         '--generate_dense_grasps',
         action='store_true',
