@@ -52,16 +52,16 @@ class GraspEstimator:
             pc[i] = pc[i][inlier_indices]
 
     def generate_and_refine_grasps(
-            self,
-            pc,
+        self,
+        pc,
     ):
         pc_list, pc_mean = self.prepare_pc(pc)
         grasps_list, confidence_list, z_list = self.generate_grasps(pc_list)
-        inlier_indices = utils.get_inlier_grasp_indices(
-            grasps_list,
-            torch.tensor(pc_mean).to(self.device),
-            threshold=1.0,
-            device=self.device)
+        inlier_indices = utils.get_inlier_grasp_indices(grasps_list,
+                                                        torch.zeros(1, 3).to(
+                                                            self.device),
+                                                        threshold=1.0,
+                                                        device=self.device)
         self.keep_inliers(grasps_list, confidence_list, z_list, pc_list,
                           inlier_indices)
         improved_eulers, improved_ts, improved_success = [], [], []
@@ -85,8 +85,8 @@ class GraspEstimator:
                                                selection_mask)
         utils.denormalize_grasps(grasps, pc_mean)
         refine_indexes, sample_indexes = np.where(selection_mask)
-        success_prob = improved_success[refine_indexes, sample_indexes].tolist(
-        )
+        success_prob = improved_success[refine_indexes,
+                                        sample_indexes].tolist()
         return grasps, success_prob
 
     def prepare_pc(self, pc):
@@ -163,7 +163,7 @@ class GraspEstimator:
             improved_ts), np.asarray(improved_success)
 
     def improve_grasps_gradient_based(
-            self, pcs, grasp_eulers, grasp_trans, last_success
+        self, pcs, grasp_eulers, grasp_trans, last_success
     ):  #euler_angles, translation, eval_and_improve, metadata):
         grasp_pcs = utils.control_points_from_rot_and_trans(
             grasp_eulers, grasp_trans, self.device)

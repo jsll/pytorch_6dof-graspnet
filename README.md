@@ -43,6 +43,10 @@ This repository also includes an improved grasp sampling network which was
 proposed here <https://github.com/NVlabs/6dof-graspnet>. The new grasp sampling
 network is trained with [Implicit Maximum Likelihood Estimation](https://arxiv.org/pdf/2004.03590.pdf).
 
+### Update 9th June 2020
+
+I have now uploaded new models that are trained for longer and until the test loss flattened. The new models can be downloaded in the same way as detailed in step 7 above.
+
 ## Demo
 
 Run the demo using the command below

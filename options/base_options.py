@@ -180,10 +180,6 @@ class BaseOptions:
             'initially I wanted to compute confidence for vae and evaluator outputs, '
             'setting the confidence weight to 1. immediately pushes the confidence to 1.0.'
         )
-        self.parser.add_argument(
-            '--run_mp',
-            action='store_true',
-            help='if true, we will train a grasping network')
 
     def parse(self):
         if not self.initialized:
@@ -194,7 +190,8 @@ class BaseOptions:
             self.opt.dataset_split = "train"
         else:
             self.opt.dataset_split = "test"
-        self.opt.batch_size = self.opt.num_objects_per_batch * self.opt.num_grasps_per_object
+        self.opt.batch_size = self.opt.num_objects_per_batch * \
+            self.opt.num_grasps_per_object
         str_ids = self.opt.gpu_ids.split(',')
         self.opt.gpu_ids = []
         for str_id in str_ids:
@@ -233,7 +230,8 @@ class BaseOptions:
             self.opt.name = name
             expr_dir = os.path.join(self.opt.checkpoints_dir, self.opt.name)
             if os.path.isdir(expr_dir) and not self.opt.continue_train:
-                option = "Directory " + expr_dir + " already exists and you have not chosen to continue to train.\nDo you want to override that training instance with a new one the press (Y/N)."
+                option = "Directory " + expr_dir + \
+                    " already exists and you have not chosen to continue to train.\nDo you want to override that training instance with a new one the press (Y/N)."
                 print(option)
                 while True:
                     choice = input()
