@@ -1,3 +1,6 @@
-version https://git-lfs.github.com/spec/v1
-oid sha256:68f5df1bf46412746966c7c4e6bdca3d3dcfc63ee7f7c9753b0648f1537191a4
-size 342
+# Download the pre-trained networks network 
+wget --no-check-certificate -r 'https://drive.google.com/uc?export=download&id=1iKUTfmYha86slBb6U__BtWCNWiOghs0z' -O checkpoints/models.zip
+echo "Models downloaded. Starting to unzip"
+unzip -q checkpoints/models.zip -d checkpoints/
+rm checkpoints/models.zip
+echo "Models downloaded and unzipped."
