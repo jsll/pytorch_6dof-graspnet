@@ -9,7 +9,7 @@ pyrender==0.1.39
 matplotlib==3.1.1
 easydict==1.9
 opencv_python==4.2.0.34
-PyYAML==5.3.1
+PyYAML==5.4
 tensorboardX==2.0
 python-fcl
 rtree
