@@ -4,7 +4,7 @@ mayavi==4.7.1
 torch==1.4.0+cu100 -f <https://download.pytorch.org/whl/torch_stable.html>
 pointnet2_ops==3.0.0
 trimesh==3.6.30
-numpy==1.17.4
+numpy==1.22.0
 pyrender==0.1.39
 matplotlib==3.1.1
 easydict==1.9
