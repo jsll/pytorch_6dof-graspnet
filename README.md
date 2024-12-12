@@ -125,13 +125,15 @@ inproceedings{mousavian2019graspnet,
 }
 ```
 
-as well as my implementation
+as well as
 
 ```
-@article{pytorch_6dof-graspnet,
-      Author = {Jens Lundell},
-      Title = {6-DOF GraspNet Pytorch},
-      Journal = {<https://github.com/jsll/pytorch_6dof-graspnet},>
-      Year = {2020}
+@inproceedings{lundell2023constrained,
+  title={Constrained generative sampling of 6-dof grasps},
+  author={Lundell, Jens and Verdoja, Francesco and Le, Tran Nguyen and Mousavian, Arsalan and Fox, Dieter and Kyrki, Ville},
+  booktitle={2023 IEEE/RSJ International Conference on Intelligent Robots and Systems (IROS)},
+  pages={2940--2946},
+  year={2023},
+  organization={IEEE}
 }
 ```
